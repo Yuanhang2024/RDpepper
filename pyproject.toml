@@ -59,6 +59,12 @@ cycpep-gui = "cycpep_master.gui.__main__:main"
 cycpep-overlay = "cycpep_master.core.overlay_collector:main"
 cycpep-v5-reproduce = "cycpep_master.v5_reproducibility:main"
 
+[project.urls]
+Homepage = "https://github.com/Yuanhang2024/RDpepper"
+Source = "https://github.com/Yuanhang2024/RDpepper"
+Issues = "https://github.com/Yuanhang2024/RDpepper/issues"
+Changelog = "https://github.com/Yuanhang2024/RDpepper/blob/main/RDPEPPER_RELEASE_NOTES.md"
+
 [tool.setuptools]
 package-dir = {cycpep_master = ".", rdpepper = "rdpepper"}
 include-package-data = false
