@@ -1,0 +1,4 @@
+symbol,CXSMILES,R1,R2,R3,source,position_class,has_sidechain,prop_status
+ac,CC([*])=O |$;;_R2;;$|,-,OH,-,core_cap,n_terminal,False,none
+nme,CN[*] |$;;_R1;$|,H,-,-,core_cap,c_terminal,False,none
+nh2,[*]N |$_R1;;$|,H,-,-,core_cap,c_terminal,False,none

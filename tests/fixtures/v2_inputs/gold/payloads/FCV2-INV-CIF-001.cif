@@ -1,0 +1,30 @@
+data_FCV2_INV_CIF_001
+_entry.id FCV2_INV_CIF_001
+loop_
+_atom_site.id
+_atom_site.label_atom_id
+_atom_site.label_comp_id
+_atom_site.label_asym_id
+_atom_site.label_seq_id
+_atom_site.type_symbol
+1 C ALA A 1 C
+2 N GLY A 2 N
+3 N SER A 3 N
+4 SG CYS A 4 S
+5 SG CYS A 5 S
+#
+loop_
+_struct_conn.id
+_struct_conn.conn_type_id
+_struct_conn.ptnr1_label_atom_id
+_struct_conn.ptnr1_label_comp_id
+_struct_conn.ptnr1_label_asym_id
+_struct_conn.ptnr1_label_seq_id
+_struct_conn.ptnr2_label_atom_id
+_struct_conn.ptnr2_label_comp_id
+_struct_conn.ptnr2_label_asym_id
+_struct_conn.ptnr2_label_seq_id
+_struct_conn.pdbx_value_order
+c1 covale C ALA A 1 N GLY A 2 SING
+c1b covale C ALA A 1 N GLY A 2 DOUB
+#

@@ -1,0 +1,8 @@
+symbol,CXSMILES,R1,R2,R3,source,position_class,has_sidechain,prop_status
+Sta_S7,[*]NC(C)(CCCCCCC[*])C([*])=O |$_R1;;;;;;;;;;_R3;;_R2;$|,H,OH,H,special,flexible,True,none
+Sta_R4,[*]NC(C)(CCCC[*])C([*])=O |$_R1;;;;;;;_R3;;_R2;$|,H,OH,H,special,flexible,True,none
+Kyn,*N[C@@H](CC(=O)c1ccccc1N)C(*)=O |$_R1;;;;;;;;;;;;;;_R2;$|,H,OH,-,special,flexible,False,none
+3MeGlu,*N[C@H](C(*)=O)[C@H](C)CC(=O)O |$_R1;;;;_R2;;;;;;;$|,H,OH,-,special,flexible,False,none
+dhB,*N/C(=C\C)C(*)=O |$_R1;;;;;;_R2;$|,H,OH,-,special,flexible,False,none
+gGlu,*N[C@H](CCC(=O)O)C(*)=O |$_R1;;;;;;;;;_R2;$|,H,OH,-,special,flexible,False,none
+Dha,*NC(=C)C(*)=O |$_R1;;;;;_R2;$|,H,OH,-,special,flexible,False,none

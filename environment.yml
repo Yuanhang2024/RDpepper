@@ -1,0 +1,19 @@
+# Full all-features development environment. Selective installs are declared
+# as extras in pyproject.toml.
+name: cycpep_master
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - rdkit=2026.03.3
+  - gemmi>=0.7.0
+  - openbabel>=3.1.0
+  - pandas>=2.0
+  - numpy>=1.24
+  - pip
+  - pip:
+      - admet-ai>=0.1.0
+      - meeko>=0.6.1
+      - pyqt5>=5.15
+      - pytest>=7.0
+      - jsonschema>=4.18

@@ -1,0 +1,66 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+*.egg
+build/
+dist/
+develop-eggs/
+.eggs/
+
+# Testing / caches
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.cache
+.codex_tmp/
+tmp*.pdbqt
+apply_patch_probe*.txt
+
+# Virtual envs
+venv/
+.venv/
+env/
+ENV/
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+desktop.ini
+.DS_Store
+Thumbs.db
+
+# User data (private, runtime-generated)
+user_monomer_library.csv
+
+# Frozen runtime sub-libraries are required package data and remain trackable.
+# Public redistribution is subject to the data-rights status in NOTICE.
+
+# Bundled binaries (too large for git; download separately — see docking/README)
+vina/*.exe
+
+# Benchmark large outputs (regenerable via run_bird_benchmark.py)
+benchmarks/bird/results/*.csv
+benchmarks/bird/results/*.json
+
+# Packaging artifacts (do not commit release archives)
+*.7z
+*.tar.gz
+*.zip
+*.whl
+
+# Local credentials and experiment output
+.env
+.env.*
+*.pem
+*.key
+*.log
+output/
+prepared/
+.venv-*/

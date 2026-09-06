@@ -1,0 +1,8 @@
+pdb_code,symbol,cxsmiles,r1,r2,r3,r3_atom,natural_analog,chemistry,source
+0EH,Sta_S7,[*]NC(C)(CCCCCCC[*])C([*])=O |$_R1;;;;;;;;;;_R3;;_R2;$|,H,OH,H,CAT,A,staple_hydrocarbon,CCD:0EH (2R)-2-amino-2-methylnonanoic acid
+MK8,Sta_R4,[*]NC(C)(CCCC[*])C([*])=O |$_R1;;;;;;;_R3;;_R2;$|,H,OH,H,CE,A,staple_hydrocarbon,CCD:MK8 2-methyl-L-norleucine
+KYN,Kyn,*N[C@@H](CC(=O)c1ccccc1N)C(*)=O |$_R1;;;;;;;;;;;;;;_R2;$|,H,OH,-,,W,backbone_nonstandard,CCD:KYN (2S)-2-amino-4-(2-aminophenyl)-4-oxobutanoic acid
+LME,3MeGlu,*N[C@H](C(*)=O)[C@H](C)CC(=O)O |$_R1;;;;_R2;;;;;;;$|,H,OH,-,,E,backbone_nonstandard,"CCD:LME (2S,3R)-2-amino-3-methyl-pentanedioic acid"
+DBU,dhB,*N/C(=C\C)C(*)=O |$_R1;;;;;;_R2;$|,H,OH,-,,T,backbone_nonstandard,CCD:DBU (2Z)-2-aminobut-2-enoic acid
+FGA,gGlu,*N[C@H](CCC(=O)O)C(*)=O |$_R1;;;;;;;;;_R2;$|,H,OH,-,,E,backbone_nonstandard,CCD:FGA gamma-D-glutamic acid
+DHA,Dha,*NC(=C)C(*)=O |$_R1;;;;;_R2;$|,H,OH,-,,S,backbone_nonstandard,CCD:DHA 2-amino-acrylic acid (dehydroalanine)

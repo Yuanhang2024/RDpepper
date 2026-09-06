@@ -1,0 +1,21 @@
+symbol,CXSMILES,R1,R2,R3,source,position_class,has_sidechain,prop_status
+A,C[C@H](N[*])C([*])=O |$;;;_R1;;_R2;$|,H,OH,-,core,flexible,False,none
+C,[*]N[C@@H](CS[*])C([*])=O |$_R1;;;;_R3;;_R2;$|,H,OH,H,core,flexible,True,none
+D,[*]N[C@@H](CC([*])=O)C([*])=O |$_R1;;;;;_R3;;;_R2;$|,H,OH,OH,core,flexible,True,none
+E,[*]N[C@@H](CCC([*])=O)C([*])=O |$_R1;;;;;;_R3;;;_R2;$|,H,OH,OH,core,flexible,True,none
+F,[*]N[C@@H](Cc1ccccc1)C([*])=O |$_R1;;;;;;;;;;;_R2;$|,H,OH,-,core,flexible,False,none
+G,[*]NCC([*])=O |$_R1;;;;_R2;$|,H,OH,-,core,flexible,False,none
+H,[*]N[C@@H](Cc1c[nH]c[nH+]1)C([*])=O |$_R1;;;;;;;;;;_R2;$|,H,OH,-,core,flexible,False,none
+I,CC[C@H](C)[C@H](N[*])C([*])=O |$;;;;;;_R1;;_R2;$|,H,OH,-,core,flexible,False,none
+K,[*]N[C@@H](CCCC[NH2+]([*]))C([*])=O |$_R1;;;;;;;;_R3;;_R2;$|,H,OH,H,core,flexible,True,none
+L,CC(C)C[C@H](N[*])C([*])=O |$;;;;;;_R1;;_R2;$|,H,OH,-,core,flexible,False,none
+M,CSCC[C@H](N[*])C([*])=O |$;;;;;;_R1;;_R2;$|,H,OH,-,core,flexible,False,none
+N,NC(=O)C[C@H](N[*])C([*])=O |$;;;;;;_R1;;_R2;$|,H,OH,-,core,flexible,False,none
+P,[*]N1CCC[C@H]1C([*])=O |$_R1;;;;;;;_R2;$|,H,OH,-,core,flexible,False,none
+Q,NC(=O)CC[C@H](N[*])C([*])=O |$;;;;;;;_R1;;_R2;$|,H,OH,-,core,flexible,False,none
+R,NC(=[NH2+])NCCC[C@H](N[*])C([*])=O |$;;;;;;;;;_R1;;_R2;$|,H,OH,-,core,flexible,False,none
+S,OC[C@H](N[*])C([*])=O |$;;;;_R1;;_R2;$|,H,OH,-,core,flexible,False,none
+T,C[C@@H](O[*])[C@H](N[*])C([*])=O |$;;;_R3;;;_R1;;_R2;$|,H,OH,H,core,flexible,True,none
+V,CC(C)[C@H](N[*])C([*])=O |$;;;;;_R1;;_R2;$|,H,OH,-,core,flexible,False,none
+W,[*]N[C@@H](Cc1c[nH]c2ccccc12)C([*])=O |$_R1;;;;;;;;;;;;;;_R2;$|,H,OH,-,core,flexible,False,none
+Y,Oc1ccc(C[C@H](N[*])C([*])=O)cc1 |$;;;;;;;;_R1;;_R2;;;$|,H,OH,-,core,flexible,False,none

@@ -1,0 +1,17 @@
+prune tests
+prune benchmarks
+prune build
+prune dist
+prune .pytest_cache
+prune .ruff_cache
+prune __pycache__
+exclude NUL
+exclude user_monomer_library.csv
+exclude data/torsion_priors/torsion_prior_manifest.json
+global-exclude *.py[cod]
+global-exclude *.bak
+global-exclude *.backup
+global-exclude *.orig
+global-exclude *.rej
+global-exclude *~
+global-exclude __pycache__

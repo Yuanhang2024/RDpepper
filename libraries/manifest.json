@@ -1,0 +1,14 @@
+{
+  "load": [
+    "caps",
+    "core",
+    "curated_cycpep",
+    "nnaa_diverse",
+    "helm_gpt",
+    "special"
+  ],
+  "training_vocab": [
+    "core",
+    "curated_cycpep"
+  ]
+}

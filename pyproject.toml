@@ -1,0 +1,109 @@
+[build-system]
+requires = ["setuptools>=77.0.3"]
+build-backend = "setuptools.build_meta:__legacy__"
+
+[project]
+name = "rdpepper"
+version = "7.1.0"
+description = "Evidence-graded cyclic-peptide graph reconstruction and validated MOL2-to-PDBQT preparation"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE", "NOTICE", "THIRD_PARTY_DATA.md", "licenses/*"]
+requires-python = ">=3.10"
+dependencies = [
+    "rdkit==2026.3.3",
+    "gemmi>=0.7.0",
+    "pandas>=2.0",
+    "numpy>=1.24",
+]
+authors = [
+    {name = "ChimeraModel Team"},
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Chemistry",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
+
+[project.optional-dependencies]
+admet = ["admet-ai>=0.1.0"]
+docking = [
+    "meeko>=0.6.1",
+    "scipy>=1.11",
+]
+inference = ["openbabel-wheel>=3.1.1.1"]
+gui = ["PyQt5>=5.15"]
+dev = [
+    "pytest>=7.0",
+    "jsonschema>=4.18",
+]
+prior-build = [
+    "pyarrow>=20.0",
+    "duckdb>=1.4",
+]
+
+[project.scripts]
+rdpepper = "rdpepper.cli:main"
+rdpepper-gui = "rdpepper.gui:main"
+rdpepper-overlay = "cycpep_master.core.overlay_collector:main"
+rdpepper-reproduce = "cycpep_master.v5_reproducibility:main"
+cycpep = "cycpep_master.cli.main:main"
+cycpep-gui = "cycpep_master.gui.__main__:main"
+cycpep-overlay = "cycpep_master.core.overlay_collector:main"
+cycpep-v5-reproduce = "cycpep_master.v5_reproducibility:main"
+
+[tool.setuptools]
+package-dir = {cycpep_master = ".", rdpepper = "rdpepper"}
+include-package-data = false
+packages = [
+    "rdpepper",
+    "cycpep_master",
+    "cycpep_master.admet",
+    "cycpep_master.cli",
+    "cycpep_master.compare",
+    "cycpep_master.core",
+    "cycpep_master.docking",
+    "cycpep_master.export",
+    "cycpep_master.gui",
+    "cycpep_master.paths",
+]
+
+[tool.setuptools.package-data]
+cycpep_master = [
+    "THIRD_PARTY_DATA.md",
+    "MIGRATION_RDPEPPER.md",
+    "RDPEPPER_RELEASE_NOTES.md",
+    "EXACT_V1.md",
+    "EXACT_V1_MIGRATION.md",
+    "V5_ARTIFACT_CONTRACT.md",
+    "V5_REPRODUCIBILITY.md",
+    "NOTICE",
+    "ORIGINAL_SOURCE.json",
+    "unified_monomer_library.csv",
+    "special_residue_library.csv",
+    "derived_monomer_library.csv",
+    "derived_monomer_manifest.json",
+    "derived_monomer_quarantine.csv",
+    "libraries/core.csv",
+    "libraries/caps.csv",
+    "libraries/curated_cycpep.csv",
+    "libraries/nnaa_diverse.csv",
+    "libraries/helm_gpt.csv",
+    "libraries/special.csv",
+    "libraries/manifest.json",
+    "data/templates/templates_index.json",
+    "data/templates/*/*.pdb",
+    "data/applicability_manifest.json",
+    "data/v5_evidence_dossier.json",
+    "data/torsion_priors/torsion_definitions.json",
+    "data/torsion_priors/torsion_prior_manifest_runtime.json",
+    "data/torsion_priors/torsion_priors_runtime.json",
+    "schemas/*.json",
+]

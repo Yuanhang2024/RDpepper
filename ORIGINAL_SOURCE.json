@@ -1,0 +1,41 @@
+{
+  "software": "RDpepper",
+  "version": "7.1.0",
+  "distribution_revision": "publication-preparation-1",
+  "publication_status": "PUBLIC_GITHUB_RELEASE",
+  "public_upload_performed": true,
+  "parent_frozen_source_tree_sha256": "44ee88ab3a9ceda4ad0b8c384ab76d418e7c10fa59e1bceb61027aea308bba9a",
+  "parent_frozen_source_archive_sha256": "12f81fdf2ee88d65577af219bf4efa21e53932db670117b87c18344ace05e53e",
+  "identity_note": "Parent hashes identify the original frozen release, not this privacy-cleaned distribution. Original receipts and archives are preserved separately and not rewritten.",
+  "scope": "Documentation, package metadata, CI and four test-file adjustments: optional external-fixture paths, generalized path privacy assertion and acceptance of the existing MOL2 provenance-comment prefix. No production algorithm or runtime data changes.",
+  "excluded_from_public_candidate": [
+    "RDPEPPER_5_1_0_QA_RECEIPT.json",
+    "RDPEPPER_6_1_0_QA_RECEIPT.json",
+    "RDPEPPER_7_0_0_QA_RECEIPT.json",
+    "V5_QA_RECEIPT.json",
+    "source_manifest.json",
+    "paths/_map_utils.bak_20260611",
+    "vina/vina_1.2.7_win.exe",
+    "vina/vina_split_1.2.7_win.exe",
+    "build_rdpepper_release.py",
+    "ETKDG_OPTIMIZATION_PLAN.md",
+    "V6_TORSION_PRIOR_MATERIALIZATION_PLAN.md",
+    "V7_MAX_COVERAGE_FALLBACK_DESIGN.md",
+    "FUNCTION_INDEX.md"
+  ],
+  "exclusion_note": "Local/historical QA records, source-root metadata, obsolete internal packaging/planning documents, a backup and optional Windows Vina binaries are not copied into this candidate. Runtime resources are retained.",
+  "original_release_qa": {
+    "compile": "PASS",
+    "result_ladder_assertions": 56,
+    "mol2_binding_assertions": 44,
+    "clean_install_and_pip_check": "PASS",
+    "full_pytest": "NOT_RUN",
+    "profile": "SMOKE_ONLY"
+  },
+  "data_rights_basis": [
+    "CycPeptMPDB subset: CC BY 4.0 per the open-access article license (Li et al., JCIM 2023, DOI 10.1021/acs.jcim.2c01573) with its free official download.",
+    "HELM-GPT monomer subset: MIT license of the HELM-GPT repository (https://github.com/charlesxu90/helm-gpt); ChEMBL upstream notices retained in licenses/ for attribution.",
+    "NNAA collection: CC BY-NC 4.0 (data DOI 10.1021/acs.jcim.2c00193.s001).",
+    "Structural templates/priors: CC BY 4.0 (Zenodo 10.5281/zenodo.17324994, 10.5281/zenodo.15164650)."
+  ]
+}

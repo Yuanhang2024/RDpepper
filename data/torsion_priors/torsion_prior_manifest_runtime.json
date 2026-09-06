@@ -1,0 +1,43 @@
+{
+  "build_protocol_sha256": "9beb18a6466a40ae3b3b1023dc8b6357a0d20fc21970d0e2e7577bd172df86c4",
+  "build_schema_version": "1.0.0-cycpep-torsion-build.2",
+  "builder_path": "docking/build_torsion_priors.py",
+  "builder_sha256": "e43208da5d1968d025a43a60f0f08414896a7776fc66b1f2c0ef1e354148f00b",
+  "completed_at_utc": "2026-08-23T05:57:38Z",
+  "frozen_source_manifest_sha256": "8bb65489651d39edcad5cc5355fc8db44156ebe36b9be5779f9bba2761a8c003",
+  "level_entry_counts": {
+    "exact": 3721,
+    "generic": 0,
+    "morgan": 4,
+    "residue_class_ring": 100
+  },
+  "network_access": false,
+  "runtime_sha256": "08da566588888560ce6f95cf494ffb564b4aae2e48c11c13e2d1a5dd43a789d7",
+  "schema_version": "1.0.0-cycpep-torsion-manifest.1",
+  "source_content_manifest_sha256": "847cebee465d311679f593a56742488a81c52e12417396af8ada9c478fc23c60",
+  "source_file_count": 578375,
+  "source_status_counts": {
+    "not_supported": 30,
+    "success": 578345
+  },
+  "source_summary": {
+    "AfCycDesign": {
+      "chain_id": "A",
+      "file_count": 20656,
+      "source_class": "predicted_design"
+    },
+    "CPBind": {
+      "chain_id": "L",
+      "file_count": 545300,
+      "source_class": "predicted_complex"
+    },
+    "CPSea_PDB": {
+      "chain_id": "L",
+      "file_count": 12419,
+      "source_class": "pdb_derived_complex"
+    }
+  },
+  "torsion_definitions_sha256": "b08286a3ac775cd45c4fe36d2a3b49d74c198359fd3c0ded583fe9f853eb9a71",
+  "torsion_entities_sha256": "21ba5186b224fd3abb13c0437dc9dcc5950726bbd3f3a31888ef1aecb09748ec",
+  "torsion_observations_sha256": "9ecf537e6bc4712c39864ab10bd2dedd1370e909480c3bd6b814abab497ffc73"
+}

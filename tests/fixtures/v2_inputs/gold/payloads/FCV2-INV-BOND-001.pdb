@@ -1,0 +1,6 @@
+HEADER    BAD BOND ORDER FCV2-INV-BOND-001
+ATOM      1  C   UNL A   1       0.000   0.000   0.000  1.00 20.00           C  
+ATOM      2  N   UNL A   1       1.200   0.000   0.000  1.00 20.00           N  
+ATOM      3  O   UNL A   1      -1.200   0.000   0.000  1.00 20.00           O  
+CONECT    1    2    2    2    2    3
+END

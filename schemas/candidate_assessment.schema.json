@@ -1,0 +1,579 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.invalid/cycpep-master/candidate-assessment.2.schema.json",
+  "title": "CycPep Master V6 truth-blind candidate assessment",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "producer",
+    "result_context",
+    "candidate_basis",
+    "mode",
+    "exploratory_only",
+    "unattended_selection_qualified",
+    "strict_output_emitted",
+    "selected_output_identity_bound",
+    "selected_output_audit",
+    "automatic_selection_permitted",
+    "candidate_count",
+    "successful_chemical_route_row_count",
+    "admitted_candidate_route_row_count",
+    "candidates",
+    "route_identity_audits",
+    "route_row_counts",
+    "identity_resolution_failed_routes",
+    "inadmissible_candidate_routes",
+    "invalid_candidate_routes",
+    "highest_shared_candidate_level",
+    "highest_evidence_qualified_level",
+    "evidence_qualification_scope",
+    "evidence_candidate_full_inchikey",
+    "evidence_candidate_identity_bound",
+    "standard_inchikey_equivalence_unique",
+    "literal_canonical_smiles_unique",
+    "conflict_dimensions",
+    "identity_layer_counts",
+    "level_definitions",
+    "deprecated_fields"
+  ],
+  "$defs": {
+    "full_inchikey": {
+      "type": "string",
+      "pattern": "^[A-Z]{14}-[A-Z]{10}-[A-Z]$"
+    },
+    "nullable_full_inchikey": {
+      "anyOf": [
+        {"$ref": "#/$defs/full_inchikey"},
+        {"type": "null"}
+      ]
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "route": {
+      "type": "string",
+      "enum": ["a", "b", "c", "e", "g"]
+    },
+    "composition": {
+      "type": "object",
+      "propertyNames": {"pattern": "^[A-Z]{1,3}$"},
+      "additionalProperties": {"type": "integer", "minimum": 1}
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "canonical_smiles",
+        "canonical_smiles_variants",
+        "full_inchikey",
+        "inchi_connectivity_block",
+        "inchi_second_block",
+        "inchi_nonprotonation_key",
+        "inchi_protonation_flag",
+        "heavy_atom_composition",
+        "heavy_atom_composition_variants",
+        "formal_charge",
+        "formal_charge_values",
+        "routes",
+        "supporting_route_count",
+        "admitted_route_row_count",
+        "route_identity_input_sha256"
+      ],
+      "properties": {
+        "canonical_smiles": {"type": "string", "minLength": 1},
+        "canonical_smiles_variants": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "full_inchikey": {"$ref": "#/$defs/full_inchikey"},
+        "inchi_connectivity_block": {
+          "type": "string",
+          "pattern": "^[A-Z]{14}$"
+        },
+        "inchi_second_block": {
+          "type": "string",
+          "pattern": "^[A-Z]{10}$"
+        },
+        "inchi_nonprotonation_key": {
+          "type": "string",
+          "pattern": "^[A-Z]{14}-[A-Z]{10}$"
+        },
+        "inchi_protonation_flag": {
+          "type": "string",
+          "pattern": "^[A-Z]$"
+        },
+        "heavy_atom_composition": {"$ref": "#/$defs/composition"},
+        "heavy_atom_composition_variants": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/composition"}
+        },
+        "formal_charge": {"type": ["integer", "null"]},
+        "formal_charge_values": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "integer"}
+        },
+        "routes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/route"}
+        },
+        "supporting_route_count": {"type": "integer", "minimum": 1},
+        "admitted_route_row_count": {"type": "integer", "minimum": 1},
+        "route_identity_input_sha256": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/sha256"}
+        }
+      }
+    },
+    "route_identity_audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "route",
+        "row_status",
+        "declared_full_inchikey",
+        "recomputed_full_inchikey",
+        "canonical_smiles",
+        "admitted",
+        "reason",
+        "identity_input_sha256"
+      ],
+      "properties": {
+        "route": {"type": "string"},
+        "row_status": {"type": "string"},
+        "declared_full_inchikey": {"type": ["string", "null"]},
+        "recomputed_full_inchikey": {
+          "$ref": "#/$defs/nullable_full_inchikey"
+        },
+        "canonical_smiles": {"type": ["string", "null"]},
+        "admitted": {"type": "boolean"},
+        "reason": {
+          "enum": [
+            "admitted",
+            "nonchemical_route",
+            "route_status_not_success",
+            "output_smiles_missing",
+            "identity_resolution_failed",
+            "declared_full_inchikey_missing",
+            "declared_recomputed_identity_mismatch"
+          ]
+        },
+        "identity_input_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    }
+  },
+  "properties": {
+    "schema_version": {"const": "1.0.0-v6-candidate-assessment.2"},
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entrypoint",
+        "package_version",
+        "rdkit_version",
+        "inchi_version",
+        "identity_policy",
+        "truth_access"
+      ],
+      "properties": {
+        "entrypoint": {
+          "const": "cycpep_master.remediation_v6._candidate_assessment"
+        },
+        "package_version": {"type": "string", "minLength": 1},
+        "rdkit_version": {"type": "string", "minLength": 1},
+        "inchi_version": {"type": "string", "minLength": 1},
+        "identity_policy": {"const": "standard-inchi-equivalence-v1"},
+        "truth_access": {"const": false}
+      }
+    },
+    "result_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "support_status",
+        "qualified_success",
+        "repair_codes"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "success",
+            "rejected",
+            "failed",
+            "timeout",
+            "not_supported",
+            "invalid_reference"
+          ]
+        },
+        "support_status": {"type": "string", "minLength": 1},
+        "qualified_success": {"type": "boolean"},
+        "repair_codes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "candidate_basis": {
+      "const": "successful chemical route rows with parseable SMILES and matching declared/recomputed Standard InChIKey"
+    },
+    "mode": {"enum": ["no_candidate", "candidate_unique", "candidate_ensemble"]},
+    "exploratory_only": {"type": "boolean"},
+    "unattended_selection_qualified": {"type": "boolean"},
+    "strict_output_emitted": {"type": "boolean"},
+    "selected_output_identity_bound": {"type": "boolean"},
+    "selected_output_audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "declared_full_inchikey",
+        "recomputed_full_inchikey",
+        "canonical_smiles",
+        "reason"
+      ],
+      "properties": {
+        "declared_full_inchikey": {
+          "$ref": "#/$defs/nullable_full_inchikey"
+        },
+        "recomputed_full_inchikey": {
+          "$ref": "#/$defs/nullable_full_inchikey"
+        },
+        "canonical_smiles": {"type": ["string", "null"]},
+        "reason": {
+          "enum": [
+            "not_emitted",
+            "identity_resolution_failed",
+            "declared_recomputed_identity_mismatch",
+            "not_in_candidate_set",
+            "bound"
+          ]
+        }
+      }
+    },
+    "automatic_selection_permitted": {"type": "boolean"},
+    "candidate_count": {"type": "integer", "minimum": 0},
+    "successful_chemical_route_row_count": {"type": "integer", "minimum": 0},
+    "admitted_candidate_route_row_count": {"type": "integer", "minimum": 0},
+    "candidates": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/candidate"}
+    },
+    "route_identity_audits": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/route_identity_audit"}
+    },
+    "route_row_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total_route_rows",
+        "chemical_route_rows",
+        "successful_chemical_route_rows",
+        "nonchemical_route_rows",
+        "unsuccessful_chemical_route_rows",
+        "missing_output_smiles_rows",
+        "identity_resolution_failed_rows",
+        "missing_declared_identity_rows",
+        "declared_identity_mismatch_rows",
+        "admitted_candidate_rows",
+        "distinct_candidate_equivalence_classes"
+      ],
+      "properties": {
+        "total_route_rows": {"type": "integer", "minimum": 0},
+        "chemical_route_rows": {"type": "integer", "minimum": 0},
+        "successful_chemical_route_rows": {"type": "integer", "minimum": 0},
+        "nonchemical_route_rows": {"type": "integer", "minimum": 0},
+        "unsuccessful_chemical_route_rows": {"type": "integer", "minimum": 0},
+        "missing_output_smiles_rows": {"type": "integer", "minimum": 0},
+        "identity_resolution_failed_rows": {"type": "integer", "minimum": 0},
+        "missing_declared_identity_rows": {"type": "integer", "minimum": 0},
+        "declared_identity_mismatch_rows": {"type": "integer", "minimum": 0},
+        "admitted_candidate_rows": {"type": "integer", "minimum": 0},
+        "distinct_candidate_equivalence_classes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "identity_resolution_failed_routes": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/route"}
+    },
+    "inadmissible_candidate_routes": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/route"}
+    },
+    "invalid_candidate_routes": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/route"}
+    },
+    "highest_shared_candidate_level": {
+      "type": ["string", "null"],
+      "enum": ["L1", "L2", "L3", null]
+    },
+    "highest_evidence_qualified_level": {
+      "type": ["string", "null"],
+      "enum": ["L1", "L2", "L3", null]
+    },
+    "evidence_qualification_scope": {"const": "unique_candidate_only"},
+    "evidence_candidate_full_inchikey": {
+      "$ref": "#/$defs/nullable_full_inchikey"
+    },
+    "evidence_candidate_identity_bound": {"type": "boolean"},
+    "standard_inchikey_equivalence_unique": {"type": "boolean"},
+    "literal_canonical_smiles_unique": {"type": "boolean"},
+    "conflict_dimensions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "heavy_atom_composition",
+          "connectivity",
+          "nonprotonation_identity_within_connectivity",
+          "protonation_or_formal_charge_within_nonprotonation_identity",
+          "standard_inchikey_equivalence"
+        ]
+      }
+    },
+    "identity_layer_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "L1_heavy_atom_composition",
+        "L2_inchi_connectivity_block",
+        "L3_inchi_nonprotonation_key",
+        "full_standard_inchikey",
+        "literal_canonical_smiles"
+      ],
+      "properties": {
+        "L1_heavy_atom_composition": {"type": "integer", "minimum": 0},
+        "L2_inchi_connectivity_block": {"type": "integer", "minimum": 0},
+        "L3_inchi_nonprotonation_key": {"type": "integer", "minimum": 0},
+        "full_standard_inchikey": {"type": "integer", "minimum": 0},
+        "literal_canonical_smiles": {"type": "integer", "minimum": 0}
+      }
+    },
+    "level_definitions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["L1", "L2", "L3"],
+      "properties": {
+        "L1": {
+          "const": "heavy-atom element composition; hydrogen, isotope, bond, charge, and stereochemistry insensitive"
+        },
+        "L2": {"const": "standard InChIKey connectivity block"},
+        "L3": {
+          "const": "first two standard InChIKey blocks; protonation layer excluded"
+        }
+      }
+    },
+    "deprecated_fields": {
+      "const": {
+        "automatic_selection_permitted": "unattended_selection_qualified",
+        "invalid_candidate_routes": "inadmissible_candidate_routes"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"mode": {"const": "no_candidate"}}},
+      "then": {
+        "properties": {
+          "candidate_count": {"const": 0},
+          "candidates": {"maxItems": 0},
+          "standard_inchikey_equivalence_unique": {"const": false},
+          "literal_canonical_smiles_unique": {"const": false},
+          "highest_shared_candidate_level": {"type": "null"},
+          "evidence_candidate_identity_bound": {"const": false},
+          "highest_evidence_qualified_level": {"type": "null"}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"mode": {"const": "candidate_unique"}}},
+      "then": {
+        "properties": {
+          "candidate_count": {"const": 1},
+          "candidates": {"minItems": 1, "maxItems": 1},
+          "standard_inchikey_equivalence_unique": {"const": true}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"mode": {"const": "candidate_ensemble"}}},
+      "then": {
+        "properties": {
+          "candidate_count": {"minimum": 2},
+          "candidates": {"minItems": 2},
+          "standard_inchikey_equivalence_unique": {"const": false},
+          "literal_canonical_smiles_unique": {"const": false},
+          "evidence_candidate_identity_bound": {"const": false},
+          "highest_evidence_qualified_level": {"type": "null"}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "result_context": {
+            "properties": {"status": {"const": "success"}}
+          }
+        }
+      },
+      "then": {
+        "properties": {"strict_output_emitted": {"const": true}}
+      },
+      "else": {
+        "properties": {
+          "strict_output_emitted": {"const": false},
+          "unattended_selection_qualified": {"const": false},
+          "result_context": {
+            "properties": {"qualified_success": {"const": false}}
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "result_context": {
+            "properties": {"qualified_success": {"const": true}}
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "result_context": {
+            "properties": {
+              "status": {"const": "success"},
+              "repair_codes": {"maxItems": 0}
+            }
+          },
+          "unattended_selection_qualified": {"const": true}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"unattended_selection_qualified": {"const": true}}
+      },
+      "then": {
+        "properties": {
+          "mode": {"const": "candidate_unique"},
+          "strict_output_emitted": {"const": true},
+          "selected_output_identity_bound": {"const": true},
+          "automatic_selection_permitted": {"const": true},
+          "exploratory_only": {"const": false},
+          "result_context": {
+            "properties": {
+              "status": {"const": "success"},
+              "qualified_success": {"const": true}
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "automatic_selection_permitted": {"const": false},
+          "exploratory_only": {"const": true}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"selected_output_identity_bound": {"const": true}}
+      },
+      "then": {
+        "properties": {
+          "selected_output_audit": {
+            "properties": {"reason": {"const": "bound"}}
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "selected_output_audit": {
+            "properties": {
+              "reason": {
+                "enum": [
+                  "not_emitted",
+                  "identity_resolution_failed",
+                  "declared_recomputed_identity_mismatch",
+                  "not_in_candidate_set"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"strict_output_emitted": {"const": false}}},
+      "then": {
+        "properties": {
+          "selected_output_identity_bound": {"const": false},
+          "selected_output_audit": {
+            "properties": {"reason": {"const": "not_emitted"}}
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "selected_output_audit": {
+            "properties": {
+              "reason": {
+                "enum": [
+                  "identity_resolution_failed",
+                  "declared_recomputed_identity_mismatch",
+                  "not_in_candidate_set",
+                  "bound"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"evidence_candidate_identity_bound": {"const": true}}
+      },
+      "then": {
+        "properties": {
+          "mode": {"const": "candidate_unique"},
+          "evidence_candidate_full_inchikey": {
+            "$ref": "#/$defs/full_inchikey"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "highest_evidence_qualified_level": {"type": "string"}
+        }
+      },
+      "then": {
+        "properties": {
+          "mode": {"const": "candidate_unique"},
+          "evidence_candidate_identity_bound": {"const": true}
+        }
+      }
+    }
+  ]
+}

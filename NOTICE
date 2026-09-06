@@ -1,0 +1,33 @@
+RDpepper 7.1.0
+
+The software code is distributed under the MIT license, including
+Copyright (c) 2021-2024 Charles Xu and others and
+Copyright (c) 2024-2026 ChimeraModel Team. MIT covers the code, not the
+bundled third-party data.
+
+Bundled data and their sources:
+- NNAA collection (9,998 rows): CC BY-NC 4.0, Amarasinghe et al.,
+  J. Chem. Inf. Model. 2022; data DOI 10.1021/acs.jcim.2c00193.s001.
+  Non-commercial use; attribution required.
+- CycPeptMPDB monomer subset (384 rows): CC BY 4.0 per the open-access
+  article license of Li et al., J. Chem. Inf. Model. 2023,
+  DOI 10.1021/acs.jcim.2c01573 (https://pubs.acs.org/jcisd8/article/
+  63/7/2240/850420/CycPeptMPDB-A-Comprehensive-Database-of-Membrane),
+  whose data availability statement directs to the free official download
+  at http://cycpeptmpdb.com/download/.
+- HELM-GPT consolidated monomer subset (2,770 rows): distributed under
+  the MIT license of the HELM-GPT project,
+  https://github.com/charlesxu90/helm-gpt (Copyright (c) 2021-2024
+  Charles Xu and others), as determined by the repository maintainer;
+  the upstream paper notes the library consolidates ChEMBL, CycPeptMPDB
+  and KRAS sources, and the ChEMBL license text is retained in
+  licenses/ for attribution reference.
+- Structural templates and torsion summaries derived from CPSea/CPBind
+  and AfCycDesign: CC BY 4.0; DOI 10.5281/zenodo.17324994 and
+  10.5281/zenodo.15164650.
+
+See THIRD_PARTY_DATA.md for full attribution, modifications and source
+links, and ORIGINAL_SOURCE.json for the frozen source identity behind
+this distribution. This distribution is a documentation- and
+privacy-cleaned copy of the frozen 7.1.0 source; it is not
+byte-identical to the internal source archive.

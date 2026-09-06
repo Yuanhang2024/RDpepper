@@ -1,0 +1,101 @@
+{
+  "schema_version": "1.0.0-cycpep-v5-evidence-dossier.1",
+  "software_version": "5.0.1",
+  "artifact_chain": [
+    "InputArtifact",
+    "ChemicalGraphArtifact",
+    "ConformerEnsembleArtifact",
+    "ValidatedMol2Artifact",
+    "FlexibilityAssessmentArtifact",
+    "PdbqtArtifact"
+  ],
+  "features": [
+    {
+      "feature": "sequence chemical graph adapter",
+      "entrypoint": "cycpep_master.sequence.build_molecule_from_sequence",
+      "implementation": [
+        "sequence.py",
+        "exact_v1.py",
+        "core/cyclic_peptide_graph.py"
+      ],
+      "tests": [
+        "tests/test_v5_sequence.py",
+        "tests/test_exact_v1.py"
+      ],
+      "evidence_class": "mechanism_and_roundtrip"
+    },
+    {
+      "feature": "validated MOL2 ensemble materialization",
+      "entrypoint": "cycpep_master.export.conformer_ensemble.materialize_mol2_ensemble",
+      "implementation": [
+        "export/conformer_ensemble.py",
+        "docking/template_library.py",
+        "docking/torsion_prior.py",
+        "docking/mol2_input.py"
+      ],
+      "tests": [
+        "tests/test_v5_pipeline.py",
+        "tests/test_mol2_export.py",
+        "tests/test_template_view.py"
+      ],
+      "evidence_class": "mechanism_and_format_qualification"
+    },
+    {
+      "feature": "validated MOL2 to PDBQT",
+      "entrypoint": "cycpep_master.application.prepare_ligand_pdbqt_from_mol2",
+      "implementation": [
+        "docking/mol2_pdbqt.py",
+        "docking/flexibility.py",
+        "docking/torsion_budget.py"
+      ],
+      "tests": [
+        "tests/test_v4_mol2_pdbqt.py",
+        "tests/test_v5_flexibility.py",
+        "tests/test_v5_pipeline.py"
+      ],
+      "evidence_class": "mechanism_and_format_qualification",
+      "claim_boundary": "No docking-pose or affinity benefit is claimed."
+    },
+    {
+      "feature": "lossless cyclic-peptide representation",
+      "entrypoint": "cycpep_master.exact_v1",
+      "implementation": [
+        "exact_v1.py",
+        "core/cyclic_peptide_graph.py",
+        "schemas/exact_v1.schema.json"
+      ],
+      "tests": [
+        "tests/test_exact_v1.py",
+        "tests/test_exact_v1_compatibility.py"
+      ],
+      "evidence_class": "roundtrip_and_compatibility"
+    }
+  ],
+  "resource_contracts": {
+    "template_library": "coordinate evidence only",
+    "torsion_prior": "local flexibility evidence only",
+    "unknown_torsion": "remain flexible",
+    "graph_only": "NOT_MATERIALIZABLE"
+  },
+  "performance_contracts": {
+    "torsion_prior_cache": "immutable process-local single-flight cache keyed by schema, resolved paths and file stat fingerprints",
+    "strict_prior_reload": "load_torsion_prior(..., use_cache=false)",
+    "embedding_attempt_timeout_seconds": 30,
+    "validated_mol2_cache": "not used; each trust-boundary load remains hash verified"
+  },
+  "reproducibility_command": "cycpep-v5-reproduce OUTPUT_DIR --no-pdbqt",
+  "claim_boundary": {
+    "allowed": [
+      "chemical graph evidence",
+      "coordinate provenance",
+      "MOL2 and PDBQT format qualification",
+      "mechanistic torsion-budget assessment"
+    ],
+    "forbidden": [
+      "experimental structure accuracy without held-out calibration",
+      "biological flexibility",
+      "docking benefit",
+      "binding affinity benefit"
+    ]
+  }
+}

@@ -1,0 +1,366 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chimeramodel.org/schemas/cycpep-v5-artifact.schema.json",
+  "title": "CycPep Master V5 typed artifact",
+  "oneOf": [
+    {"$ref": "#/$defs/input"},
+    {"$ref": "#/$defs/chemical_graph"},
+    {"$ref": "#/$defs/conformer_ensemble"},
+    {"$ref": "#/$defs/validated_mol2"},
+    {"$ref": "#/$defs/flexibility_assessment"},
+    {"$ref": "#/$defs/pdbqt"}
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "chemical_level",
+        "chemical_basis",
+        "chemical_rigor",
+        "coordinate_origin",
+        "coordinate_level",
+        "format_level",
+        "flexibility_level",
+        "budget_state"
+      ],
+      "properties": {
+        "chemical_level": {"enum": ["C0", "C1", "C2", "C3"]},
+        "chemical_basis": {
+          "enum": ["S", "Q", "R", "H", "C", "NONE"]
+        },
+        "chemical_rigor": {
+          "type": "string",
+          "pattern": "^C[0-3]:(S|Q|R|H|C|NONE)$"
+        },
+        "coordinate_origin": {
+          "enum": [
+            "none",
+            "generated",
+            "torsion_guided",
+            "template_borrowed",
+            "source_bound",
+            "external_predicted",
+            "experimental"
+          ]
+        },
+        "coordinate_level": {"enum": ["X0", "X1", "X2", "X3"]},
+        "format_level": {"enum": ["Q0", "Q1", "Q2", "Q3"]},
+        "flexibility_level": {"enum": ["F0", "F1", "F2", "F3"]},
+        "budget_state": {
+          "enum": [
+            "not_requested",
+            "satisfied",
+            "unsatisfied",
+            "not_assessable"
+          ]
+        }
+      }
+    },
+    "claim_boundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allowed", "forbidden"],
+      "properties": {
+        "allowed": {
+          "type": "array",
+          "items": {"type": "string"},
+          "uniqueItems": true
+        },
+        "forbidden": {
+          "type": "array",
+          "items": {"type": "string"},
+          "uniqueItems": true
+        }
+      }
+    },
+    "base": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "artifact_type",
+        "artifact_id",
+        "parent_artifact_ids",
+        "status",
+        "payload_sha256",
+        "evidence",
+        "warnings",
+        "provenance",
+        "claim_boundary"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "1.0.0-cycpep-v5-artifact.1"
+        },
+        "artifact_type": {
+          "enum": [
+            "InputArtifact",
+            "ChemicalGraphArtifact",
+            "ConformerEnsembleArtifact",
+            "ValidatedMol2Artifact",
+            "FlexibilityAssessmentArtifact",
+            "PdbqtArtifact"
+          ]
+        },
+        "artifact_id": {"$ref": "#/$defs/sha256"},
+        "parent_artifact_ids": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/sha256"},
+          "uniqueItems": true
+        },
+        "status": {
+          "enum": [
+            "MATERIALIZED",
+            "PARTIAL",
+            "NOT_MATERIALIZABLE",
+            "FAILED"
+          ]
+        },
+        "payload_sha256": {"$ref": "#/$defs/sha256"},
+        "evidence": {"$ref": "#/$defs/evidence"},
+        "warnings": {
+          "type": "array",
+          "items": {"type": "string"},
+          "uniqueItems": true
+        },
+        "provenance": {"type": "object"},
+        "claim_boundary": {"$ref": "#/$defs/claim_boundary"}
+      }
+    },
+    "input": {
+      "allOf": [
+        {"$ref": "#/$defs/base"},
+        {
+          "type": "object",
+          "required": [
+            "input_kind",
+            "source_sha256",
+            "source_path",
+            "source_value"
+          ],
+          "properties": {
+            "artifact_type": {"const": "InputArtifact"},
+            "input_kind": {"type": "string", "minLength": 1},
+            "source_sha256": {"$ref": "#/$defs/sha256"},
+            "source_path": {"type": ["string", "null"]},
+            "source_value": {"type": ["string", "null"]}
+          }
+        }
+      ]
+    },
+    "chemical_graph": {
+      "allOf": [
+        {"$ref": "#/$defs/base"},
+        {
+          "type": "object",
+          "required": [
+            "exact_v1",
+            "smiles",
+            "full_inchikey",
+            "formal_charge",
+            "topology_class",
+            "microstate_policy",
+            "parent_full_inchikey",
+            "exact_v1_identity_match",
+            "materializable"
+          ],
+          "properties": {
+            "artifact_type": {"const": "ChemicalGraphArtifact"},
+            "exact_v1": {"type": "object"},
+            "smiles": {"type": ["string", "null"]},
+            "full_inchikey": {"type": ["string", "null"]},
+            "formal_charge": {"type": ["integer", "null"]},
+            "topology_class": {"type": ["string", "null"]},
+            "microstate_policy": {"type": "string"},
+            "parent_full_inchikey": {"type": ["string", "null"]},
+            "exact_v1_identity_match": {
+              "type": ["boolean", "null"]
+            },
+            "materializable": {"type": "boolean"},
+            "monomer_resolution": {"type": "object"}
+          }
+        }
+      ]
+    },
+    "conformer_member": {
+      "type": "object",
+      "required": [
+        "conformer_id",
+        "coordinate_origin",
+        "strategy",
+        "mol2_path",
+        "mol2_sha256",
+        "receipt_path",
+        "receipt_sha256",
+        "energy",
+        "qa",
+        "status",
+        "warnings"
+      ],
+      "properties": {
+        "conformer_id": {"type": "string", "minLength": 1},
+        "coordinate_origin": {
+          "enum": [
+            "generated",
+            "torsion_guided",
+            "template_borrowed",
+            "source_bound",
+            "external_predicted",
+            "experimental"
+          ]
+        },
+        "strategy": {"type": "string"},
+        "mol2_path": {"type": ["string", "null"]},
+        "mol2_sha256": {
+          "oneOf": [
+            {"$ref": "#/$defs/sha256"},
+            {"type": "null"}
+          ]
+        },
+        "receipt_path": {"type": ["string", "null"]},
+        "receipt_sha256": {
+          "oneOf": [
+            {"$ref": "#/$defs/sha256"},
+            {"type": "null"}
+          ]
+        },
+        "energy": {"type": ["number", "null"]},
+        "qa": {"type": "object"},
+        "status": {"type": "string"},
+        "warnings": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "conformer_ensemble": {
+      "allOf": [
+        {"$ref": "#/$defs/base"},
+        {
+          "type": "object",
+          "required": [
+            "requested_count",
+            "produced_count",
+            "members",
+            "manifest_path",
+            "manifest_sha256"
+          ],
+          "properties": {
+            "artifact_type": {"const": "ConformerEnsembleArtifact"},
+            "requested_count": {"type": "integer", "minimum": 1},
+            "produced_count": {"type": "integer", "minimum": 0},
+            "members": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/conformer_member"}
+            },
+            "manifest_path": {"type": ["string", "null"]},
+            "manifest_sha256": {
+              "oneOf": [
+                {"$ref": "#/$defs/sha256"},
+                {"type": "null"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "validated_mol2": {
+      "allOf": [
+        {"$ref": "#/$defs/base"},
+        {
+          "type": "object",
+          "required": [
+            "conformer_id",
+            "path",
+            "sha256",
+            "receipt_path",
+            "receipt_sha256",
+            "full_inchikey"
+          ],
+          "properties": {
+            "artifact_type": {"const": "ValidatedMol2Artifact"},
+            "conformer_id": {"type": "string"},
+            "path": {"type": "string"},
+            "sha256": {"$ref": "#/$defs/sha256"},
+            "receipt_path": {"type": "string"},
+            "receipt_sha256": {"$ref": "#/$defs/sha256"},
+            "full_inchikey": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "flexibility_assessment": {
+      "allOf": [
+        {"$ref": "#/$defs/base"},
+        {
+          "type": "object",
+          "required": [
+            "requested_mode",
+            "effective_mode",
+            "initial_torsdof",
+            "final_torsdof",
+            "bond_evidence",
+            "budget_satisfied"
+          ],
+          "properties": {
+            "artifact_type": {
+              "const": "FlexibilityAssessmentArtifact"
+            },
+            "requested_mode": {
+              "enum": ["fast", "balanced", "thorough"]
+            },
+            "effective_mode": {
+              "enum": ["fast", "balanced", "thorough"]
+            },
+            "initial_torsdof": {"type": ["integer", "null"]},
+            "final_torsdof": {"type": ["integer", "null"]},
+            "bond_evidence": {
+              "type": "array",
+              "items": {"type": "object"}
+            },
+            "budget_satisfied": {"type": ["boolean", "null"]}
+          }
+        }
+      ]
+    },
+    "pdbqt": {
+      "allOf": [
+        {"$ref": "#/$defs/base"},
+        {
+          "type": "object",
+          "required": [
+            "path",
+            "sha256",
+            "role",
+            "parent_mol2_sha256",
+            "tree_valid",
+            "atom_invariants_valid",
+            "qualification_state",
+            "budget_satisfied"
+          ],
+          "properties": {
+            "artifact_type": {"const": "PdbqtArtifact"},
+            "path": {"type": "string"},
+            "sha256": {"$ref": "#/$defs/sha256"},
+            "role": {"type": "string"},
+            "parent_mol2_sha256": {"$ref": "#/$defs/sha256"},
+            "tree_valid": {"type": "boolean"},
+            "atom_invariants_valid": {"type": "boolean"},
+            "qualification_state": {
+              "enum": [
+                "PDBQT_QUALIFIED",
+                "PDBQT_BASELINE",
+                "PDBQT_BUDGETED"
+              ]
+            },
+            "budget_satisfied": {"type": ["boolean", "null"]}
+          }
+        }
+      ]
+    }
+  }
+}

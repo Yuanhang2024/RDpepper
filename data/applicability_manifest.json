@@ -1,0 +1,81 @@
+{
+  "schema_version": "1.0.0-cycpep-v5-applicability.1",
+  "sequence_length_bands": [
+    {
+      "minimum": 1,
+      "maximum": 4,
+      "status": "experimental",
+      "recommendation": "Small rings may be highly strained; inspect every conformer."
+    },
+    {
+      "minimum": 5,
+      "maximum": 16,
+      "status": "supported",
+      "recommendation": "Primary sequence-only materialization domain."
+    },
+    {
+      "minimum": 17,
+      "maximum": 30,
+      "status": "experimental",
+      "recommendation": "Template coverage is sparse; expect partial ensembles."
+    },
+    {
+      "minimum": 31,
+      "maximum": 89,
+      "status": "external_structure_recommended",
+      "recommendation": "Use an external predicted or experimental coordinate structure."
+    },
+    {
+      "minimum": 90,
+      "maximum": null,
+      "status": "external_structure_required",
+      "recommendation": "Sequence-only ETKDG is outside the supported product domain."
+    }
+  ],
+  "topology_classes": {
+    "head_to_tail": "supported",
+    "disulfide": "supported",
+    "isopeptide": "supported",
+    "ester": "supported",
+    "thioether": "supported",
+    "sidechain_to_tail": "supported",
+    "mixed": "experimental",
+    "multichain": "experimental"
+  },
+  "monomer_domain": {
+    "standard_amino_acids": "supported",
+    "explicit_registry_nnaa": "supported_when_ports_and_stereo_are_exact",
+    "runtime_user_monomers": "supported_when_content_addressed",
+    "unknown_or_inferred_ports": "abstain"
+  },
+  "template_resource": {
+    "index_entry_count": 794,
+    "default_view_entry_count": 340,
+    "default_allowed_sources": ["cpbind", "scaffold"],
+    "nominal_length_minimum": 4,
+    "nominal_length_maximum": 16,
+    "role": "coordinate_evidence_only"
+  },
+  "torsion_prior_resource": {
+    "source_file_count": 578375,
+    "source_success_count": 578345,
+    "source_not_supported_count": 30,
+    "role": "local_flexibility_evidence_only",
+    "unknown_bond_policy": "remain_flexible"
+  },
+  "claim_boundary": {
+    "allowed": [
+      "chemical graph materialization",
+      "coordinate generation provenance",
+      "MOL2 format qualification",
+      "PDBQT format qualification",
+      "mechanistic torsion-budget assessment"
+    ],
+    "forbidden": [
+      "experimental structure accuracy without held-out calibration",
+      "biological flexibility",
+      "docking pose benefit",
+      "binding affinity benefit"
+    ]
+  }
+}

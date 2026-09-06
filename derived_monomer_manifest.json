@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0.0",
+  "status": "EMPTY_VALIDATED_OVERLAY",
+  "source": "local_structure_derived",
+  "unified_library_sha256": "66c1b02e966fbee2dd7fc7a3e1df198a0b7393ff74f6cce4a84368165b279e5b",
+  "entries": [],
+  "pdb_aliases": [],
+  "quarantine_count": 0
+}
