@@ -56,8 +56,7 @@ pip install rdpepper
 # Option 2: wheel downloaded from the GitHub Releases page
 python -m pip install ./rdpepper-7.1.0-py3-none-any.whl
 
-# Option 2
-3: from a checkout of this repository
+# Option 3: from a checkout of this repository
 python -m pip install .
 ```
 
