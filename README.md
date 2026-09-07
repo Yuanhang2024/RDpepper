@@ -50,10 +50,14 @@ Install from this repository or from the wheel published on the
 Releases page. This release makes no claim about PyPI availability.
 
 ```bash
-# Option 1: wheel downloaded from the GitHub Releases page
+# Option 1: directly install from PyPI
+pip install rdpepper
+
+# Option 2: wheel downloaded from the GitHub Releases page
 python -m pip install ./rdpepper-7.1.0-py3-none-any.whl
 
-# Option 2: from a checkout of this repository
+# Option 2
+3: from a checkout of this repository
 python -m pip install .
 ```
 
