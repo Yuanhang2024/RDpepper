@@ -39,6 +39,31 @@ The public distribution name, repository name, and new code entry points are
 artifact, and provenance identifiers remain valid and are not rewritten by the
 renaming.
 
+## Repository layout
+
+The runtime implementation lives at the repository root and is packaged as
+`cycpep_master` (the build maps the flat root onto `cycpep_master.*`);
+[`rdpepper/`](rdpepper/) is the thin public facade that new code imports, and
+[`application.py`](application.py) is the shared service layer behind both the
+CLI and the GUI.
+
+| Path | Purpose |
+|---|---|
+| [`rdpepper/`](rdpepper/) | Public facade package; `import rdpepper`, `rdpepper` / `rdpepper-gui` entry points |
+| [`core/`](core/), [`paths/`](paths/), [`export/`](export/) | Parsing, chemistry graph, monomer resolution, MOL2 format/compatibility; reconstruction routes A–H; conformer/ensemble export |
+| [`docking/`](docking/) | PDBQT preparation, protonation policy, Meeko interface, AutoDock Vina wrapper |
+| [`gui/`](gui/), [`cli/`](cli/) | PyQt5 desktop workspace; command-line interface |
+| [`admet/`](admet/), [`compare/`](compare/) | Optional ADMET prediction; SMILES and stereo comparison |
+| [`libraries/`](libraries/), [`data/`](data/) | Monomer sub-libraries; runtime templates, torsion priors, applicability manifest |
+| [`unified_monomer_library.csv`](unified_monomer_library.csv) and sibling `*_library.csv` / `derived_monomer_*` files | Packaged monomer libraries (13,152 unified entries) |
+| [`schemas/`](schemas/) | JSON schemas for artifact contracts |
+| [`tests/`](tests/) | pytest suite (synthetic inputs; external-fixture tests skip) |
+| [`LICENSE`](LICENSE), [`NOTICE`](NOTICE), [`THIRD_PARTY_DATA.md`](THIRD_PARTY_DATA.md), [`licenses/`](licenses/) | MIT code license and per-resource data terms |
+| [`application.py`](application.py), [`pipeline.py`](pipeline.py), [`reconstruction.py`](reconstruction.py), [`run.py`](run.py) | Service layer, pipeline orchestrator, unified reconstruction entry, source-checkout runner |
+
+A file-level map with entry points, optional extras, and the intentional
+boundaries of the public tree is in [`docs/REPOSITORY_GUIDE.md`](docs/REPOSITORY_GUIDE.md).
+
 ## Requirements
 
 - **Python** >= 3.10 (declared package requirement). Release verification for
@@ -295,11 +320,13 @@ never silently expands.
 
 ## Tests and benchmark scope
 
-This candidate includes the existing software tests but not the publication
+This distribution includes the existing software tests but not the publication
 benchmark harness, raw benchmark runs, external gold datasets, or article PDFs.
-The selected CI smoke tests use synthetic inputs. Optional external test
-fixtures can be supplied through `RDPEPPER_TEST_4INS_PDB` and
-`RDPEPPER_TEST_SPECIAL_RESIDUES_DIR`; absent fixture files remain skipped.
+The release smoke tests use synthetic inputs. A few structure-dependent tests
+reference external PDB fixtures that are not part of this repository (for
+example insulin and special-residue cases); those tests skip automatically
+when the files are absent, and no environment-variable fixture override is
+wired in this release.
 No full-suite or cross-platform pass is inferred from the release smoke tests.
 
 ## License and third-party data
