@@ -814,8 +814,44 @@ class MainWindow(QtWidgets.QMainWindow):
         protonate_button = self._button("Apply pH 7.4 rules", QtWidgets.QStyle.SP_ArrowForward)
         protonate_button.clicked.connect(self._run_protonation)
         protonate_layout.addWidget(protonate_button)
+
+        mol2_group = QtWidgets.QGroupBox("Read MOL2")
+        mol2_form = QtWidgets.QFormLayout(mol2_group)
+        mol2_widget, self.mol2_read_input = self._file_field(
+            "Select MOL2 file", "MOL2 (*.mol2);;All files (*)"
+        )
+        mol2_form.addRow("MOL2 input", mol2_widget)
+        receipt_widget, self.mol2_read_receipt = self._file_field(
+            "Select validation receipt (optional)",
+            "JSON (*.json);;All files (*)",
+        )
+        mol2_form.addRow("Receipt (optional)", receipt_widget)
+        self.mol2_read_compatibility = QtWidgets.QComboBox()
+        self.mol2_read_compatibility.addItem(
+            "RDKit native (default)", "rdkit_native"
+        )
+        self.mol2_read_compatibility.addItem(
+            "Charge-aware: restore UNITY formal charges (not protonation)",
+            "rdkit_charge_aware",
+        )
+        self.mol2_read_compatibility.setToolTip(
+            "restore declared formal charges before RDKit sanitization; "
+            "does not infer chemical correctness"
+        )
+        mol2_form.addRow("Compatibility", self.mol2_read_compatibility)
+        sdf_widget, self.mol2_read_export_sdf = self._save_field(
+            "Select new SDF artifact (optional)",
+            "SDF (*.sdf);;All files (*)",
+        )
+        mol2_form.addRow("Export SDF (optional)", sdf_widget)
+        self.mol2_read_button = self._button(
+            "Read MOL2", QtWidgets.QStyle.SP_DialogApplyButton
+        )
+        self.mol2_read_button.clicked.connect(self._run_read_mol2)
+        mol2_form.addRow("", self.mol2_read_button)
+        protonate_layout.addWidget(mol2_group)
         protonate_layout.addStretch(1)
-        tabs.addTab(protonate, "Protonation")
+        tabs.addTab(protonate, "Protonation & MOL2")
 
         vina = QtWidgets.QWidget()
         vina_layout = QtWidgets.QVBoxLayout(vina)
@@ -1714,6 +1750,15 @@ class MainWindow(QtWidgets.QMainWindow):
     def _run_protonation(self):
         self._run_service(
             services.protonate_smiles, self.protonate_input.toPlainText().strip()
+        )
+
+    def _run_read_mol2(self):
+        self._run_service(
+            services.read_mol2,
+            self.mol2_read_input.text().strip(),
+            compatibility=self.mol2_read_compatibility.currentData(),
+            receipt_path=self.mol2_read_receipt.text().strip() or None,
+            export_sdf=self.mol2_read_export_sdf.text().strip() or None,
         )
 
     def _dock_center_mode_changed(self):

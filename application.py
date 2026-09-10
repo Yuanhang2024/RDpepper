@@ -1099,14 +1099,31 @@ def _mol2_coordinate_ledger(path: str | Path) -> dict[str, Any]:
         "force_field",
         "expected_full_inchikey",
         "observed_full_inchikey",
+        "mapping_policy",
+        "source_handoff_block_reason",
+        "source_chain_id",
     ):
         if fields.get(key):
             tier_evidence[key] = fields[key]
-    for key in ("etkdg_attempts",):
+    for key in (
+        "etkdg_attempts",
+        "isomorphism_count",
+        "source_heavy_atoms",
+        "candidate_heavy_atoms",
+        "source_bonds",
+        "candidate_bonds",
+    ):
         raw = fields.get(key)
         if raw is not None and raw.isdigit():
             tier_evidence[key] = int(raw)
-    for key in ("mmff_available", "graph_smiles_divergence"):
+    for key in (
+        "mmff_available",
+        "graph_smiles_divergence",
+        "stereo_realization_verified",
+        "symmetry_equivalent_alternatives",
+        "induced_edge_equality_verified",
+        "source_handoff_blocked",
+    ):
         if key in fields:
             tier_evidence[key] = fields[key] == "true"
     warnings: list[str] = []
@@ -4281,15 +4298,15 @@ def protonate_smiles(smiles: str) -> dict[str, Any]:
     try:
         from rdkit import Chem
 
-        from .docking.protonation import protonate_ph74
+        from .docking.protonation import protonate_molecule_ph74
 
         input_molecule = Chem.MolFromSmiles(smiles)
         if input_molecule is None or input_molecule.GetNumAtoms() == 0:
             return _operation_result(
                 operation, "invalid_input", error="input SMILES is not parseable"
             )
-        output_smiles = protonate_ph74(smiles)
-        output_molecule = Chem.MolFromSmiles(output_smiles)
+        output_molecule, microstate = protonate_molecule_ph74(input_molecule)
+        output_smiles = Chem.MolToSmiles(Chem.RemoveHs(output_molecule))
         if output_molecule is None or output_molecule.GetNumAtoms() == 0:
             return _operation_result(
                 operation,
@@ -4300,10 +4317,127 @@ def protonate_smiles(smiles: str) -> dict[str, Any]:
         return _operation_result(
             operation,
             "success",
-            data={"input_smiles": smiles, "output_smiles": output_smiles},
+            data={"input_smiles": smiles, "output_smiles": output_smiles,
+                  "microstate": microstate},
         )
     except Exception as exc:
         return _exception_result(operation, exc)
+
+
+def protonate_mol2(
+    mol2_path: str | Path,
+    output_path: str | Path,
+    *,
+    policy: str = "physiological",
+    receipt_path: str | Path | None = None,
+) -> dict[str, Any]:
+    """Write an explicit pH 7.4 microstate without replacing the source MOL2."""
+    operation = "protonate_mol2"
+    try:
+        from rdkit import Chem
+        from .docking.mol2_input import (
+            default_receipt_path, load_validated_mol2, write_validation_receipt,
+        )
+        from .docking.protonation import protonate_molecule_ph74
+        from .export.conformer import mol_to_mol2
+
+        if policy != "physiological":
+            return _operation_result(operation, "invalid_input", error="policy must be physiological (generic pH 7.4 rules)")
+        source, destination = Path(mol2_path).resolve(), Path(output_path).resolve()
+        output_receipt = default_receipt_path(destination)
+        report_path = Path(str(destination) + ".microstate.json")
+        if destination.suffix.lower() != ".mol2":
+            return _operation_result(operation, "invalid_input", error="output must be a new .mol2 path")
+        if any(path.exists() for path in (destination, output_receipt, report_path)) or _paths_alias(source, destination):
+            return _operation_result(operation, "invalid_input", error="microstate output, receipt and report must not already exist or alias the input")
+        parent = load_validated_mol2(source, receipt_path=receipt_path)
+        molecule, microstate = protonate_molecule_ph74(parent.molecule)
+        input_heavy = [a.GetIdx() for a in parent.molecule.GetAtoms() if a.GetAtomicNum() > 1]
+        output_heavy = [a.GetIdx() for a in molecule.GetAtoms() if a.GetAtomicNum() > 1]
+        if len(input_heavy) != len(output_heavy):
+            raise ValueError("protonation changed the heavy-atom count")
+        input_conf = parent.molecule.GetConformer()
+        output_conf = molecule.GetConformer()
+        if any(
+            parent.molecule.GetAtomWithIdx(i).GetAtomicNum() != molecule.GetAtomWithIdx(j).GetAtomicNum()
+            or max(abs(input_conf.GetAtomPosition(i)[k] - output_conf.GetAtomPosition(j)[k]) for k in range(3)) > 1e-6
+            for i, j in zip(input_heavy, output_heavy)
+        ):
+            raise ValueError("protonation changed heavy-atom order or source coordinates")
+        translated = dict(zip(input_heavy, output_heavy))
+        old_receipt = parent.receipt
+        mapped = [translated[i] for i in old_receipt["mapped_heavy_atom_indices"]]
+        generated = [translated[i] for i in old_receipt["generated_heavy_atom_indices"]]
+        origins = {str(i): "source" for i in mapped}
+        origins.update({str(i): "generated" for i in generated})
+        from rdkit.Chem import inchi
+        expected = inchi.MolToInchiKey(molecule)
+        if not expected:
+            raise ValueError("protonated molecule has no full InChIKey")
+        microstate = dict(microstate)
+        microstate.update({
+            "parent_mol2_path": str(source), "parent_mol2_sha256": parent.sha256,
+            "parent_receipt_sha256": parent.receipt_sha256,
+            "input_full_inchikey": parent.full_inchikey,
+            "output_full_inchikey": expected,
+            "input_smiles": Chem.MolToSmiles(Chem.RemoveHs(parent.molecule)),
+            "output_smiles": Chem.MolToSmiles(Chem.RemoveHs(molecule)),
+            "heavy_coordinates_preserved": True,
+            "coordinate_level": parent.coordinate_level,
+            "claim_boundary": "Generic pH 7.4 rule-based microstate; not experimental protonation, a pKa prediction, or a chemistry-accuracy upgrade.",
+        })
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix=".protonate-", dir=str(destination.parent)) as temporary:
+            temp_mol2 = Path(temporary) / destination.name
+            content, error = mol_to_mol2(molecule)
+            if error or not content:
+                raise ValueError(error or "protonation produced no MOL2")
+            content = (
+                "# RDPEPPER_MICROSTATE_POLICY=physiological_ph7.4\n"
+                "# RDPEPPER_WARNING=RULE_BASED_MICROSTATE_NOT_EXPERIMENTAL\n"
+                f"# RDPEPPER_PARENT_MOL2_SHA256={parent.sha256}\n" + content
+            )
+            temp_mol2.write_text(content, encoding="utf-8", newline="\n")
+            temp_receipt = write_validation_receipt(
+                temp_mol2, coordinate_mode=parent.coordinate_mode,
+                coordinate_level=parent.coordinate_level,
+                rigor="L1:H", quality="hypothesis",
+                source_heavy_atom_mapping_complete=parent.source_heavy_atom_mapping_complete,
+                atom_provenance_complete=True,
+                source_input_sha256=old_receipt.get("source_input_sha256"),
+                topology_class=old_receipt.get("topology_class"),
+                macrocycle_ring_size=old_receipt.get("macrocycle_ring_size"),
+                max_source_coordinate_delta_angstrom=old_receipt.get("max_source_coordinate_delta_angstrom"),
+                evidence_manifest_sha256=_evidence_digest(microstate),
+                expected_full_inchikey=expected,
+                mapped_heavy_atom_indices=mapped,
+                generated_heavy_atom_indices=generated,
+                atom_coordinate_origins=origins,
+            )
+            verified = load_validated_mol2(temp_mol2, receipt_path=temp_receipt)
+            if Chem.MolToSmiles(Chem.RemoveHs(verified.molecule)) != microstate["output_smiles"]:
+                raise ValueError("MOL2 roundtrip changed the assigned microstate")
+            report_text = json.dumps(json_ready(microstate), ensure_ascii=False, allow_nan=False, indent=2) + "\n"
+            temp_report = Path(temporary) / report_path.name
+            temp_report.write_text(report_text, encoding="utf-8")
+            for temporary_path, final_path in ((temp_mol2, destination), (temp_report, report_path), (temp_receipt, output_receipt)):
+                with final_path.open("xb") as handle:
+                    handle.write(temporary_path.read_bytes())
+        return _operation_result(operation, "success", data={
+            "output_path": str(destination), "validation_receipt_path": str(output_receipt),
+            "microstate_report_path": str(report_path), "microstate": microstate,
+            "coordinate_level": parent.coordinate_level,
+            "formal_charge": verified.formal_charge,
+            "full_inchikey": verified.full_inchikey,
+            "warnings": ["RULE_BASED_MICROSTATE_NOT_EXPERIMENTAL"],
+            "artifacts": [{"format": "mol2", "path": str(destination), "role": "primary",
+                           "rigor": "L1:H", "coordinate_level": parent.coordinate_level,
+                           "warnings": ["RULE_BASED_MICROSTATE_NOT_EXPERIMENTAL"]}],
+        })
+    except Exception as exc:
+        return _exception_result(operation, exc)
+
+
 def validate_mol2(
     mol2_path: str | Path,
     *,
@@ -4349,6 +4483,137 @@ def validate_mol2(
             operation,
             validation_error_status(exc),
             error=f"validated MOL2 required: {exc}",
+        )
+    except Exception as exc:
+        return _exception_result(operation, exc)
+
+
+def _verify_sdf_roundtrip(molecule, sdf_path: Path) -> float:
+    from rdkit import Chem
+
+    supplier = Chem.SDMolSupplier(
+        str(sdf_path), removeHs=False, sanitize=True
+    )
+    records = [record for record in supplier]
+    if len(records) != 1 or records[0] is None:
+        raise ValueError("SDF roundtrip did not re-read exactly one molecule")
+    roundtrip = records[0]
+    if roundtrip.GetNumAtoms() != molecule.GetNumAtoms():
+        raise ValueError("SDF roundtrip atom count differs from the source")
+    if molecule.GetNumConformers() != 1 or roundtrip.GetNumConformers() != 1:
+        raise ValueError("SDF roundtrip requires exactly one conformer")
+    source_conformer = molecule.GetConformer()
+    target_conformer = roundtrip.GetConformer()
+    max_delta = 0.0
+    for index in range(molecule.GetNumAtoms()):
+        left = source_conformer.GetAtomPosition(index)
+        right = target_conformer.GetAtomPosition(index)
+        max_delta = max(
+            max_delta,
+            max(
+                abs(left.x - right.x),
+                abs(left.y - right.y),
+                abs(left.z - right.z),
+            ),
+        )
+    if max_delta > 0.001:
+        raise ValueError(
+            f"SDF roundtrip coordinates differ by {max_delta:.6f} A"
+        )
+    try:
+        identity_verified = (
+            Chem.MolToSmiles(Chem.RemoveHs(molecule))
+            == Chem.MolToSmiles(Chem.RemoveHs(roundtrip))
+        )
+    except Exception as exc:
+        raise ValueError(
+            f"SDF roundtrip identity check failed: {exc}"
+        ) from exc
+    if not identity_verified:
+        raise ValueError("SDF roundtrip identity differs from the source")
+    return max_delta
+
+
+def _export_read_mol2_sdf(
+    molecule,
+    export_sdf: str | Path,
+    mol2_path: str | Path,
+) -> dict[str, Any]:
+    """Write the read molecule to a new SDF file and verify the roundtrip."""
+    from rdkit import Chem
+
+    output = Path(export_sdf).expanduser()
+    if _paths_alias(output, mol2_path):
+        raise ValueError(f"SDF export path aliases the MOL2 input: {output}")
+    if output.exists() or output.is_symlink():
+        raise ValueError(f"refusing to overwrite existing SDF export: {output}")
+    if molecule.GetNumConformers() != 1:
+        raise ValueError("SDF export requires exactly one conformer")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary = tempfile.mkstemp(
+        prefix=f".{output.name}.",
+        suffix=".tmp.sdf",
+        dir=str(output.parent),
+    )
+    os.close(descriptor)
+    temporary_path = Path(temporary)
+    try:
+        writer = Chem.SDWriter(str(temporary_path))
+        try:
+            writer.write(molecule)
+        finally:
+            writer.close()
+        max_delta = _verify_sdf_roundtrip(molecule, temporary_path)
+        # Exclusive create: a raced file at the destination must fail the
+        # export instead of being overwritten.
+        with output.open("xb") as handle:
+            handle.write(temporary_path.read_bytes())
+    finally:
+        if temporary_path.exists():
+            temporary_path.unlink()
+    return {
+        "artifact_kind": "sdf_file",
+        "path": str(output),
+        "sha256": _cached_sha256_file(output),
+        "roundtrip_max_coordinate_delta": max_delta,
+        "roundtrip_identity_verified": True,
+    }
+
+
+def read_mol2(
+    mol2_path: str | Path,
+    *,
+    compatibility: str = "rdkit_native",
+    receipt_path: str | Path | None = None,
+    export_sdf: str | Path | None = None,
+) -> dict[str, Any]:
+    """Read a MOL2 file under a compatibility mode and report the parse.
+
+    ``rdkit_native`` (default) reproduces the stock RDKit MOL2 read;
+    ``rdkit_charge_aware`` additionally restores formal charges declared in
+    ``@<TRIPOS>UNITY_ATOM_ATTR``.  The data payload is the JSON reader
+    report; no molecule object is placed in the envelope.
+    """
+    operation = "read_mol2"
+    try:
+        from .core.mol2_compat import load_mol2
+
+        molecule, report = load_mol2(
+            mol2_path,
+            compatibility=compatibility,
+            receipt_path=receipt_path,
+        )
+        data = dict(report)
+        if export_sdf is not None:
+            data["export_sdf"] = _export_read_mol2_sdf(
+                molecule, export_sdf, mol2_path
+            )
+        return _operation_result(operation, "success", data=data)
+    except (ValueError, OSError) as exc:
+        return _operation_result(
+            operation,
+            "invalid_input",
+            error=f"MOL2 read failed: {exc}",
         )
     except Exception as exc:
         return _exception_result(operation, exc)
@@ -5989,12 +6254,19 @@ def prepare_ligand_pdbqt_ensemble(
 def prepare_receptor_pdbqt(
     coordinate_path: str | Path,
     output_path: str | Path,
+    *,
+    ph: float | None = None,
 ) -> dict[str, Any]:
     operation = "prepare_receptor_pdbqt"
     try:
         from .docking.receptor_pdbqt import pdb_to_receptor_pdbqt
 
-        error = pdb_to_receptor_pdbqt(str(coordinate_path), str(output_path))
+        if ph is not None and (isinstance(ph, bool) or not math.isfinite(float(ph)) or not 0 < float(ph) <= 14):
+            return _operation_result(operation, "invalid_input", error="pH must be finite in (0, 14]")
+        error = pdb_to_receptor_pdbqt(
+            str(coordinate_path), str(output_path),
+            **({"ph": float(ph)} if ph is not None else {}),
+        )
         if error:
             return _operation_result(
                 operation, _external_error_status(error), error=error
@@ -6006,8 +6278,16 @@ def prepare_receptor_pdbqt(
                 "failed",
                 error="receptor PDBQT converter produced no nonempty output",
             )
+        preparation_remarks = [
+            line for line in destination.read_text(encoding="utf-8").splitlines()
+            if line.startswith("REMARK")
+        ]
         return _operation_result(
-            operation, "success", data={"output_path": str(output_path)}
+            operation, "success", data={
+                "output_path": str(output_path),
+                "preparation_remarks": preparation_remarks,
+                "warnings": [line for line in preparation_remarks if "WARNING" in line],
+            }
         )
     except Exception as exc:
         return _exception_result(operation, exc)
@@ -6092,9 +6372,27 @@ def run_prepared_vina(
     box_size: Sequence[float] = (25.0, 25.0, 25.0),
     exhaustiveness: int = 32,
     num_modes: int = 9,
+    seed: int | None = None,
+    cpu: int | None = None,
+    max_evals: int | None = None,
+    timeout_seconds: float = 600,
+    mode: str = "docking",
 ) -> dict[str, Any]:
-    """Run Vina directly on caller-prepared PDBQT files."""
+    """Run Vina directly on caller-prepared PDBQT files.
+
+    ``mode`` selects the Vina operation: ``docking`` (global search, the
+    default and only behavior before this parameter existed), ``score_only``
+    (score the input pose as-is; Vina writes no output file, ``output_pdbqt``
+    is ignored and reported as None), or ``local_only`` (local refinement of
+    the input pose; a fresh verified output PDBQT is required).
+    """
     operation = "run_prepared_vina"
+    if not isinstance(mode, str) or mode not in ("docking", "score_only", "local_only"):
+        return _operation_result(
+            operation,
+            "invalid_input",
+            error="mode must be one of docking, score_only, local_only",
+        )
     try:
         center = tuple(float(value) for value in center)
         box_size = tuple(float(value) for value in box_size)
@@ -6107,6 +6405,19 @@ def run_prepared_vina(
             raise ValueError("exhaustiveness and num_modes must be integers")
         exhaustiveness = int(exhaustiveness)
         num_modes = int(num_modes)
+        execution_controls = {}
+        for name, value in (("seed", seed), ("cpu", cpu), ("max_evals", max_evals)):
+            if value is not None:
+                if isinstance(value, bool) or int(value) != value or value < 0:
+                    raise ValueError(f"{name} must be a non-negative integer")
+                execution_controls[name] = int(value)
+        if isinstance(timeout_seconds, bool):
+            raise ValueError("timeout_seconds must be positive and finite")
+        timeout_seconds = float(timeout_seconds)
+        if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be positive and finite")
+        if timeout_seconds != 600:
+            execution_controls["timeout_seconds"] = timeout_seconds
     except (TypeError, ValueError, OverflowError) as exc:
         return _operation_result(operation, "invalid_input", error=str(exc))
     if len(center) != 3 or len(box_size) != 3:
@@ -6142,6 +6453,8 @@ def run_prepared_vina(
             str(output_pdbqt),
             exhaustiveness=exhaustiveness,
             num_modes=num_modes,
+            **execution_controls,
+            **({} if mode == "docking" else {"mode": mode}),
         )
         if error:
             return _operation_result(
@@ -6154,11 +6467,19 @@ def run_prepared_vina(
                 "affinity_kcal_mol": affinity,
                 "ligand_pdbqt": str(ligand_pdbqt),
                 "receptor_pdbqt": str(receptor_pdbqt),
-                "output_pdbqt": str(output_pdbqt),
+                "output_pdbqt": None if mode == "score_only" else str(output_pdbqt),
+                "output_pdbqt_written": mode != "score_only",
                 "center": center,
                 "box_size": box_size,
                 "exhaustiveness": exhaustiveness,
                 "num_modes": num_modes,
+                "seed": seed,
+                "seed_mode": "automatic" if seed in (None, 0) else "fixed",
+                "cpu": cpu,
+                "cpu_mode": "automatic" if cpu in (None, 0) else "fixed",
+                "max_evals": max_evals,
+                "timeout_seconds": timeout_seconds,
+                "mode": mode,
             },
         )
     except (OSError, TypeError, ValueError) as exc:
@@ -6712,7 +7033,9 @@ def capabilities() -> dict[str, Any]:
                 "template_conformers",
                 "admet",
                 "protonate",
+                "protonate_mol2",
                 "validate_mol2",
+                "read_mol2",
                 "prepare_ligand_from_sequence",
                 "prepare_ligand_pdbqt_from_mol2",
                 "prepare_ligand_pdbqt",
@@ -6836,6 +7159,8 @@ __all__ = [
     "prepare_ligand_pdbqt_from_pdb",
     "prepare_receptor_pdbqt",
     "protonate_smiles",
+    "protonate_mol2",
+    "read_mol2",
     "resolve_monomers",
     "reconstruct_coordinates",
     "reconstruct_exact_v1",

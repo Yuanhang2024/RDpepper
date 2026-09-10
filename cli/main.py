@@ -34,6 +34,8 @@ _COMMANDS = {
     "template",
     "admet",
     "protonate",
+    "protonate-mol2",
+    "read-mol2",
     "prepare-sequence",
     "pdbqt",
     "dock-center",
@@ -106,7 +108,8 @@ def _legacy_parser(
             "Complete service commands: capabilities, reconstruct, "
             "reconstruct-unified, reconstruct-exact, convert, "
             "audit, compare, export, batch-export, conformers, template, admet, "
-            "protonate, pdbqt, dock-center, vina, dock, batch-dock, monomer. "
+            "protonate, protonate-mol2, read-mol2, pdbqt, dock-center, vina, "
+            "dock, batch-dock, monomer. "
             f"Use '{program_name} <command> --help'."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -764,6 +767,37 @@ def _service_parser(
     protonate.add_argument("smiles")
     _add_json_options(protonate)
 
+    protonate_mol2 = sub.add_parser(
+        "protonate-mol2", help="Write a pH 7.4 microstate of a validated MOL2 while preserving heavy coordinates"
+    )
+    protonate_mol2.add_argument("mol2_path")
+    protonate_mol2.add_argument("output_path")
+    protonate_mol2.add_argument("--receipt", help="Validation receipt for the input MOL2")
+    _add_json_options(protonate_mol2)
+
+    read_mol2 = sub.add_parser(
+        "read-mol2",
+        help="Read a MOL2 file into the RDKit graph layer and report its identity",
+    )
+    read_mol2.add_argument("input", help="MOL2 file")
+    read_mol2.add_argument(
+        "--compatibility",
+        choices=["rdkit_native", "rdkit_charge_aware"],
+        default="rdkit_native",
+        help=(
+            "rdkit_charge_aware restores declared UNITY formal charges "
+            "before RDKit sanitization; does not infer chemical correctness "
+            "(default: rdkit_native)"
+        ),
+    )
+    read_mol2.add_argument(
+        "--receipt", help="Validation receipt for the input MOL2"
+    )
+    read_mol2.add_argument(
+        "--export-sdf", dest="export_sdf", help="Optional new SDF artifact path"
+    )
+    _add_json_options(read_mol2)
+
     prepare_sequence = sub.add_parser(
         "prepare-sequence",
         help=(
@@ -894,6 +928,7 @@ def _service_parser(
     receptor = pdbqt_sub.add_parser("receptor", help="Prepare receptor PDBQT")
     receptor.add_argument("input")
     receptor.add_argument("output")
+    receptor.add_argument("--ph", type=float, help="Optional generic residue-state pH policy; not site-specific pKa prediction")
     _add_json_options(receptor)
     validate = pdbqt_sub.add_parser("validate", help="Audit ligand PDBQT torsion tree")
     validate.add_argument("input", nargs="?", help="PDBQT file, or '-' for stdin")
@@ -914,6 +949,20 @@ def _service_parser(
     vina.add_argument("--box-size", nargs=3, type=float, default=(25.0, 25.0, 25.0))
     vina.add_argument("--exhaustiveness", type=int, default=32)
     vina.add_argument("--num-modes", type=int, default=9)
+    vina.add_argument("--seed", type=int)
+    vina.add_argument("--cpu", type=int)
+    vina.add_argument("--max-evals", type=int)
+    vina.add_argument("--timeout-seconds", type=float, default=600)
+    vina.add_argument(
+        "--mode",
+        choices=("docking", "score_only", "local_only"),
+        default="docking",
+        help=(
+            "Vina operation: docking (global search, default), score_only "
+            "(score the input pose; no output file), or local_only (locally "
+            "refine the input pose)"
+        ),
+    )
     _add_json_options(vina)
 
     dock = sub.add_parser("dock", help="Run the Vina integration")
@@ -1308,6 +1357,17 @@ def _service_main(
             result = services.predict_admet(values)
         elif args.command == "protonate":
             result = services.protonate_smiles(args.smiles)
+        elif args.command == "protonate-mol2":
+            result = services.protonate_mol2(
+                args.mol2_path, args.output_path, receipt_path=args.receipt,
+            )
+        elif args.command == "read-mol2":
+            result = services.read_mol2(
+                args.input,
+                compatibility=args.compatibility,
+                receipt_path=args.receipt,
+                export_sdf=args.export_sdf,
+            )
         elif args.command == "prepare-sequence":
             result = services.prepare_ligand_from_sequence(
                 args.sequence,
@@ -1398,7 +1458,10 @@ def _service_main(
                     ),
                 )
             elif args.pdbqt_command == "receptor":
-                result = services.prepare_receptor_pdbqt(args.input, args.output)
+                result = services.prepare_receptor_pdbqt(
+                    args.input, args.output,
+                    **({"ph": args.ph} if args.ph is not None else {}),
+                )
             else:
                 if args.payload is not None and args.input is not None:
                     raise ValueError("payload and input are mutually exclusive")
@@ -1423,6 +1486,11 @@ def _service_main(
                 box_size=args.box_size,
                 exhaustiveness=args.exhaustiveness,
                 num_modes=args.num_modes,
+                mode=args.mode,
+                **({"seed": args.seed} if args.seed is not None else {}),
+                **({"cpu": args.cpu} if args.cpu is not None else {}),
+                **({"max_evals": args.max_evals} if args.max_evals is not None else {}),
+                **({"timeout_seconds": args.timeout_seconds} if args.timeout_seconds != 600 else {}),
             )
         elif args.command == "dock":
             result = services.dock_structure(

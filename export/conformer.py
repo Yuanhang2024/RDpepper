@@ -1317,12 +1317,223 @@ def _result_first_binding_error(
     return None
 
 
+_VERIFIED_HANDOFF_MATCH_CAP = 4096
+
+# mol_to_mol2 error prefixes that describe filesystem/IO failures.  Only a
+# handoff failure that is NOT an IO error may fall back to the honest X1
+# SMILES regeneration; an IO error would fail the fallback identically.
+_MOL2_IO_ERROR_PREFIXES = (
+    "cannot clear prior MOL2 output",
+    "MOL2 write failed",
+)
+
+
+def _is_mol2_io_error(error):
+    return bool(error) and any(
+        str(error).startswith(prefix) for prefix in _MOL2_IO_ERROR_PREFIXES
+    )
+
+
+def _verified_source_handoff_molecule(candidate_smiles, pdb_path, chain_id):
+    """Certified source-coordinate handoff for a graphless candidate.
+
+    The candidate SMILES is the sole chemistry authority: the exported
+    molecule is built from it, keeps its bond orders, formal charges, and
+    protonation state, and only receives coordinates.  Hydrogens and charges
+    are ignored while establishing the atom mapping and nowhere else.
+
+    Certification gates, all of which must pass before coordinates move:
+
+    1. The RDKit-perceived source heavy topology (elements + explicit edges
+       + perceived bond orders) admits the candidate graph as a FULL
+       element/bond-order isomorphism, so every source heavy atom is used
+       exactly once and elements/topology are consistent both ways.
+    2. Multiple isomorphisms are accepted only when every alternative is
+       related to the selected one by a candidate-graph automorphism that
+       preserves identity, attachment, and stereo (verified through
+       chirality-aware canonical symmetry classes).  Any other ambiguity
+       refuses the handoff; no RMSD/closest-to-crystal oracle exists here.
+    3. The lexicographically first isomorphism is selected deterministically.
+    4. AssignStereochemistryFrom3D on the mapped coordinates must reproduce
+       the candidate's exact isomeric SMILES.
+
+    Returns ``(molecule, certification)`` or ``(None, blocker_reason)``.
+    """
+    if not candidate_smiles:
+        return None, "verified handoff needs a candidate SMILES"
+    candidate = Chem.MolFromSmiles(str(candidate_smiles))
+    if candidate is None or candidate.GetNumAtoms() == 0:
+        return None, "candidate SMILES is not parseable"
+    try:
+        # Explicit stereo hydrogens encoded as real atoms must not count as
+        # heavy atoms when comparing against the hydrogen-stripped source.
+        candidate = Chem.RemoveHs(candidate)
+    except Exception as exc:
+        return None, f"candidate explicit-hydrogen normalization failed: {exc}"
+    if candidate.GetNumAtoms() == 0:
+        return None, "candidate SMILES has no heavy atoms"
+    try:
+        source = Chem.MolFromPDBFile(
+            str(pdb_path), removeHs=True, sanitize=True
+        )
+    except Exception as exc:
+        return None, f"source PDB perception failed: {exc}"
+    if source is None or source.GetNumAtoms() == 0:
+        return None, "source PDB perception returned no heavy atoms"
+    wanted_chain = str(chain_id).strip()
+    foreign_chains = sorted({
+        info.GetChainId().strip()
+        for info in (
+            atom.GetPDBResidueInfo() for atom in source.GetAtoms()
+        )
+        if info is not None and info.GetChainId().strip() != wanted_chain
+    })
+    if foreign_chains:
+        return None, (
+            "source PDB perception contains foreign chains: "
+            + ",".join(foreign_chains)
+        )
+    if candidate.GetNumAtoms() != source.GetNumAtoms():
+        return None, (
+            "candidate/source heavy-atom count mismatch: "
+            f"{candidate.GetNumAtoms()} != {source.GetNumAtoms()}"
+        )
+    # Induced-graph equality: a substructure match on equal atom counts
+    # proves every candidate edge exists in the source, but NOT that the
+    # source lacks extra edges.  Equal bond counts under a bijection close
+    # that gap; the per-edge check below re-verifies the mapped pairs.
+    if candidate.GetNumBonds() != source.GetNumBonds():
+        return None, (
+            "candidate/source bond count mismatch (source topology is not "
+            "the candidate graph): "
+            f"{candidate.GetNumBonds()} != {source.GetNumBonds()}"
+        )
+    # Element-only query atoms (charge/protonation ignored for mapping only);
+    # bond orders and adjacency remain constraints so every match is a full
+    # element/bond-order isomorphism covering the entire source heavy set.
+    query_mol = Chem.RWMol(candidate)
+    for atom in candidate.GetAtoms():
+        query_mol.ReplaceAtom(
+            atom.GetIdx(),
+            Chem.AtomFromSmarts(f"[#{atom.GetAtomicNum()}]"),
+        )
+    matches = source.GetSubstructMatches(
+        query_mol.GetMol(),
+        uniquify=False,
+        useChirality=False,
+        maxMatches=_VERIFIED_HANDOFF_MATCH_CAP + 1,
+    )
+    if not matches:
+        return None, (
+            "no element/bond-order isomorphism onto the source heavy topology"
+        )
+    if len(matches) > _VERIFIED_HANDOFF_MATCH_CAP:
+        return None, "unbounded isomorphism count (mapping not forced)"
+    match = min(matches)
+    if (
+        len(set(match)) != len(match)
+        or len(match) != source.GetNumAtoms()
+    ):
+        return None, "isomorphism is not a source-covering bijection"
+    for bond in candidate.GetBonds():
+        left, right = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+        source_bond = source.GetBondBetweenAtoms(match[left], match[right])
+        if (
+            source_bond is None
+            or source_bond.GetBondType() != bond.GetBondType()
+        ):
+            return None, (
+                "mapped candidate edge is absent or has a different order "
+                "in the source graph"
+            )
+    symmetry_classes = list(
+        Chem.CanonicalRankAtoms(
+            candidate, breakTies=False, includeChirality=True
+        )
+    )
+    if len(matches) > 1:
+        inverse = {
+            source_idx: query_idx
+            for query_idx, source_idx in enumerate(match)
+        }
+        for alternative in matches:
+            for query_idx, source_idx in enumerate(alternative):
+                partner = inverse[source_idx]
+                if symmetry_classes[partner] != symmetry_classes[query_idx]:
+                    return None, (
+                        "alternative mappings are not symmetry-equivalent "
+                        "under candidate-graph automorphisms preserving "
+                        "identity/attachment/stereo (mapping not forced)"
+                    )
+    export = Chem.Mol(candidate)
+    conformer = Chem.Conformer(export.GetNumAtoms())
+    source_conformer = source.GetConformer()
+    metadata = _extract_pdb_atom_metadata(pdb_path, chain_id)
+    for query_idx, source_idx in enumerate(match):
+        position = source_conformer.GetAtomPosition(source_idx)
+        conformer.SetAtomPosition(
+            query_idx, (position.x, position.y, position.z)
+        )
+        atom = export.GetAtomWithIdx(query_idx)
+        info = source.GetAtomWithIdx(source_idx).GetPDBResidueInfo()
+        serial = info.GetSerialNumber() if info is not None else None
+        record = metadata.get(serial) if serial is not None else None
+        if record is None:
+            # Source provenance must be complete for every mapped atom:
+            # without a matching serial/metadata record the export cannot
+            # claim a certified one-to-one source handoff.
+            return None, (
+                "source atom has no matching PDB serial/metadata record "
+                f"(source index {source_idx}, serial {serial})"
+            )
+        atom.SetProp('_TriposAtomName', record['atom_name'])
+        atom.SetProp('_TriposResidueName', record['residue_name'])
+        atom.SetProp('_TriposChainId', record['chain_id'])
+        atom.SetIntProp('_TriposResidueNumber', record['residue_number'])
+        atom.SetProp('_TriposInsertionCode', record['insertion_code'])
+    conformer.Set3D(True)
+    export.AddConformer(conformer, assignId=True)
+    # 3D stereo gate on a throwaway protonated copy: the mapped source
+    # coordinates must realize the candidate stereochemistry exactly.  The
+    # exported molecule keeps its SMILES-derived stereochemistry untouched.
+    # addCoords=True is required: without it the added hydrogens carry zero
+    # coordinates and would corrupt the 3D stereo perception.
+    try:
+        probe = Chem.AddHs(Chem.Mol(export), addCoords=True)
+        Chem.AssignStereochemistryFrom3D(probe)
+        realized = Chem.MolToSmiles(Chem.RemoveHs(probe))
+    except Exception as exc:
+        return None, f"3D stereo verification failed: {exc}"
+    expected_smiles = Chem.MolToSmiles(candidate)
+    if realized != expected_smiles:
+        return None, (
+            "source 3D coordinates do not realize the candidate stereochemistry"
+        )
+    certification = {
+        "mapping_policy": (
+            "lexicographically_first_element_bond_order_isomorphism_no_fit_"
+            "charge_ignored_for_mapping_only"
+        ),
+        "isomorphism_count": len(matches),
+        "symmetry_equivalent_alternatives": len(matches) > 1,
+        "stereo_realization_verified": True,
+        "induced_edge_equality_verified": True,
+        "source_heavy_atoms": source.GetNumAtoms(),
+        "candidate_heavy_atoms": candidate.GetNumAtoms(),
+        "source_bonds": source.GetNumBonds(),
+        "candidate_bonds": candidate.GetNumBonds(),
+        "source_chain_id": wanted_chain,
+    }
+    return export, certification
+
+
 def _smiles_only_to_mol2(
     candidate_smiles,
     output_path=None,
     *,
     fallback_origin="smiles_only",
     graph_divergence_detail=None,
+    source_handoff_block_reason=None,
 ):
     """Maximum acceptance: SMILES -> ETKDG -> MOL2 at X1 with tier header.
 
@@ -1384,6 +1595,10 @@ def _smiles_only_to_mol2(
         fallback_origin=fallback_origin,
         graph_smiles_divergence=bool(graph_divergence_detail),
         graph_divergence_detail=graph_divergence_detail,
+        source_handoff_blocked=(
+            True if source_handoff_block_reason else None
+        ),
+        source_handoff_block_reason=source_handoff_block_reason,
         etkdg_attempts=etkdg_attempts,
         mmff_available=mmff_available,
         optimization=optimization,
@@ -1404,7 +1619,13 @@ def _smiles_only_to_mol2(
     return produced, None
 
 
-def _result_first_candidate_to_mol2(result, output_path=None):
+def _result_first_candidate_to_mol2(
+    result,
+    output_path=None,
+    *,
+    source_pdb_path=None,
+    source_chain_id=None,
+):
     """Write an explicitly selected inferred candidate with source coordinates.
 
     Layering contract: the graph helper only ever returns a molecule.  When
@@ -1412,7 +1633,13 @@ def _result_first_candidate_to_mol2(result, output_path=None):
     materialization layer alone decides to rematerialize from SMILES at X1,
     and the divergence is recorded in the artifact header rather than being
     silently substituted.  The graph-success route emits an X3 tier header
-    whose atom ids are parsed back from the written artifact.
+    whose atom ids are parsed back from the written artifact.  A graphless
+    candidate that is bound to this request's source file may instead keep
+    its verified chemistry while receiving the source heavy-atom coordinates
+    through :func:`_verified_source_handoff_molecule`; when that certified
+    handoff is unavailable, or its MOL2 writer/roundtrip fails without an IO
+    error, the original X1 SMILES fallback runs unchanged and records the
+    concrete blocker.
     """
     candidate_smiles = getattr(result, "candidate_smiles", None)
     candidate_graph = getattr(result, "candidate_graph", None)
@@ -1421,11 +1648,114 @@ def _result_first_candidate_to_mol2(result, output_path=None):
     if not candidate_smiles:
         return None, "result-first reconstruction produced no candidate SMILES"
     if not isinstance(candidate_graph, dict):
-        # Maximum acceptance: no source-bound graph; regenerate at X1.
+        handoff_block_reason = None
+        handoff_molecule = None
+        certification = None
+        # A handoff is attempted only when this export request carries its
+        # bound source file; the legacy graphless call keeps its exact
+        # historical X1 receipt (no handoff tokens at all).
+        if source_pdb_path:
+            if bool(getattr(result, "ambiguous", False)):
+                handoff_block_reason = "candidate selection is ambiguous"
+            else:
+                handoff_molecule, handoff_detail = (
+                    _verified_source_handoff_molecule(
+                        candidate_smiles, source_pdb_path, source_chain_id
+                    )
+                )
+                if handoff_molecule is None:
+                    handoff_block_reason = handoff_detail
+                else:
+                    certification = handoff_detail
+        if handoff_molecule is not None:
+            try:
+                handoff_molecule, _generated_hydrogen_count = (
+                    _add_v6_export_hydrogens(handoff_molecule)
+                )
+            except Exception as exc:
+                handoff_molecule = None
+                handoff_block_reason = (
+                    "verified handoff protonation materialization failed: "
+                    f"{exc}"
+                )
+        if handoff_molecule is not None:
+            produced, error = mol_to_mol2(handoff_molecule, output_path)
+            if error is None and produced is not None:
+                try:
+                    if output_path:
+                        with open(produced, encoding="utf-8") as handle:
+                            content = handle.read()
+                    else:
+                        content = produced
+                except Exception as exc:
+                    if output_path:
+                        try:
+                            os.remove(produced)
+                        except OSError:
+                            pass
+                    return None, (
+                        f"verified handoff MOL2 roundtrip read failed: {exc}"
+                    )
+                heavy_ids = _mol2_one_based_heavy_atom_ids(content)
+                note = _coordinate_tier_note(
+                    "X3",
+                    mapped_one_based=heavy_ids,
+                    generated_one_based=[],
+                    coordinate_source="result_first_verified_source_handoff",
+                    **certification,
+                )
+                produced = _prepend_mol2_tier_note(produced, note, output_path)
+                content = note + content
+                roundtrip_inchikey, roundtrip_error = (
+                    _mol2_roundtrip_full_inchikey(content)
+                )
+                expected = Chem.MolFromSmiles(candidate_smiles)
+                expected_inchikey = (
+                    Chem.MolToInchiKey(expected) if expected else None
+                )
+                if (
+                    roundtrip_error
+                    or not expected_inchikey
+                    or roundtrip_inchikey != expected_inchikey
+                ):
+                    if output_path:
+                        try:
+                            os.remove(produced)
+                        except OSError:
+                            pass
+                    # Honest X1 fallback: the certified handoff molecule
+                    # failed its own MOL2 chemistry roundtrip, which is a
+                    # handoff blocker (not an IO error), so the export
+                    # regenerates from the candidate SMILES instead of
+                    # shipping an artifact that fails self-verification.
+                    handoff_block_reason = str(
+                        roundtrip_error
+                        or "verified handoff MOL2 full-InChIKey mismatch: "
+                        f"{roundtrip_inchikey} != {expected_inchikey}"
+                    )
+                else:
+                    return produced, None
+            if error is not None or produced is None:
+                if error is not None and not _is_mol2_io_error(error):
+                    # Honest X1 fallback: the MOL2 writer rejected the
+                    # handoff molecule itself (not the filesystem), so the
+                    # concrete writer failure is recorded and the export
+                    # regenerates from the candidate SMILES at X1.
+                    handoff_block_reason = (
+                        f"verified handoff MOL2 writer failed: {error}"
+                    )
+                else:
+                    return produced, error
+        # Maximum acceptance: no certified source handoff; regenerate at X1.
         return _smiles_only_to_mol2(
             candidate_smiles,
             output_path,
             fallback_origin="smiles_only_no_source_graph",
+            source_handoff_block_reason=(
+                str(handoff_block_reason).replace(" ", "_")
+                if handoff_block_reason
+                else None
+            ),
         )
     molecule, error = _candidate_graph_to_mol(
         candidate_graph, candidate_smiles
@@ -1868,7 +2198,10 @@ def pdb_to_mol2(
                     ),
                 )
             return _result_first_candidate_to_mol2(
-                inferred, output_path=output_path
+                inferred,
+                output_path=output_path,
+                source_pdb_path=pdb_path,
+                source_chain_id=chain_id,
             )
         validation = validate_pdb_reconstruction_input_v5(pdb_path, chain_id)
         if not validation.accepted:

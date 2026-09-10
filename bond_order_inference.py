@@ -26,12 +26,18 @@ _ENGINE_PRIORITY = {
     "strict_candidate_assessment": 0,
     "path_g_template": 1,
     "openbabel_pdb": 2,
-    "rdkit_pdb_proximity": 3,
-    "path_h_geometry": 4,
+    "geometry_simple_local": 3,
+    "rdkit_pdb_proximity": 4,
+    "path_h_geometry": 5,
 }
+# Representative choice among graph-bearing members of one identity group.
+# openbabel keeps precedence; the geometry-simple graph outranks the raw
+# proximity graph because it carries per-bond length/angle order evidence
+# while proximity perception assigns uniform single bonds.
 _GRAPH_ENGINE_PRIORITY = {
     "openbabel_pdb": 0,
-    "rdkit_pdb_proximity": 1,
+    "geometry_simple_local": 1,
+    "rdkit_pdb_proximity": 2,
 }
 _FAMILY_PRIORITY = {
     "template": 0,
@@ -110,6 +116,153 @@ def _heavy_composition_from_mol(molecule: Any) -> dict[str, int]:
             ).items()
         )
     )
+
+
+def declared_source_edges(
+    pdb_path: Path, source_atoms: list[dict[str, Any]]
+) -> list[tuple[int, int]]:
+    """Heavy-atom edges the source PDB declares explicitly.
+
+    CONECT rows contribute their serial pairs directly.  LINK rows with
+    symmetry 1555 on both endpoints contribute their (chain, resnum, icode,
+    resname, atom-name) pair resolved against the chain-scoped source atoms.
+    Only edges between two HEAVY source atoms are returned; hydrogens and
+    records naming atoms outside the chain scope are ignored (never guessed).
+    """
+    heavy_serials = {
+        int(atom["serial"])
+        for atom in source_atoms
+        if str(atom["element"]).upper() != "H"
+    }
+    site_to_serial = {
+        (
+            str(atom["chain"]).strip(),
+            int(atom["residue_number"]),
+            str(atom["insertion_code"]).strip(),
+            str(atom["residue"]).strip(),
+            str(atom["name"]).strip(),
+        ): int(atom["serial"])
+        for atom in source_atoms
+    }
+    edges: set[tuple[int, int]] = set()
+    with pdb_path.open(encoding="ascii", errors="replace") as handle:
+        for line in first_model_records(handle):
+            record = line[:6].strip()
+            if record == "CONECT":
+                try:
+                    serials = [
+                        int(line[start:end])
+                        for start, end in (
+                            (6, 11), (11, 16), (16, 21), (21, 26), (26, 31),
+                        )
+                        if line[start:end].strip()
+                    ]
+                except ValueError:
+                    continue
+                for partner in serials[1:]:
+                    if (
+                        serials[0] in heavy_serials
+                        and partner in heavy_serials
+                    ):
+                        edges.add((min(serials[0], partner), max(serials[0], partner)))
+            elif record == "LINK" and len(line) >= 57:
+                try:
+                    sites = (
+                        (
+                            line[21:22].strip(),
+                            int(line[22:26]),
+                            line[26:27].strip(),
+                            line[17:20].strip(),
+                            line[12:16].strip(),
+                        ),
+                        (
+                            line[51:52].strip(),
+                            int(line[52:56]),
+                            line[56:57].strip(),
+                            line[47:50].strip(),
+                            line[42:46].strip(),
+                        ),
+                    )
+                    symmetry = (line[59:65].strip(), line[66:72].strip())
+                except ValueError:
+                    continue
+                if symmetry not in (("1555", "1555"), ("", "")):
+                    continue
+                resolved = [site_to_serial.get(site) for site in sites]
+                if all(
+                    serial is not None and serial in heavy_serials
+                    for serial in resolved
+                ):
+                    left, right = resolved
+                    edges.add((min(left, right), max(left, right)))
+    return sorted(edges)
+
+
+def _graph_serial_bonds(candidate: dict[str, Any]) -> set[tuple[int, int]] | None:
+    """Serial-indexed heavy bond set of a candidate graph, or None."""
+    graph = candidate.get("candidate_graph")
+    if not isinstance(graph, dict):
+        return None
+    atoms = graph.get("atoms")
+    bonds = graph.get("bonds")
+    if not isinstance(atoms, list) or not isinstance(bonds, list):
+        return None
+    heavy: set[int] = set()
+    for row in atoms:
+        if not isinstance(row, dict):
+            continue
+        element = str(row.get("element") or "").upper()
+        if element and element != "H":
+            try:
+                heavy.add(int(row["serial"]))
+            except (KeyError, TypeError, ValueError):
+                return None
+    serial_bonds: set[tuple[int, int]] = set()
+    for row in bonds:
+        if not isinstance(row, dict):
+            continue
+        try:
+            left, right = int(row["a"]), int(row["b"])
+        except (KeyError, TypeError, ValueError):
+            return None
+        if left in heavy and right in heavy:
+            serial_bonds.add((min(left, right), max(left, right)))
+    return serial_bonds
+
+
+def declared_edge_coverage(
+    members: list[dict[str, Any]],
+    declared: list[tuple[int, int]],
+) -> dict[str, Any]:
+    """Best declared-edge coverage across an identity group's members."""
+    if not declared:
+        return {
+            "declared_edge_count": 0,
+            "covered_edge_count": 0,
+            "covered": True,
+            "note": "no declared heavy-atom edges in source",
+        }
+    best_covered = -1
+    best_member = None
+    for member in members:
+        serial_bonds = _graph_serial_bonds(member)
+        if serial_bonds is None:
+            continue
+        covered = sum(1 for edge in declared if edge in serial_bonds)
+        if covered > best_covered:
+            best_covered = covered
+            best_member = member.get("engine")
+    return {
+        "declared_edge_count": len(declared),
+        "covered_edge_count": max(best_covered, 0),
+        "covered": best_covered == len(declared),
+        "best_covering_engine": best_member,
+        "note": (
+            "group contains no graph-bearing member to verify declared edges"
+            if best_member is None
+            else None
+        ),
+    }
 
 
 def _identity_from_smiles(smiles: str) -> dict[str, Any]:
@@ -414,6 +567,7 @@ def infer_bond_order_candidates(
     path = Path(pdb_path)
     source_atoms = _source_atoms(path, str(chain_id))
     source_composition = _heavy_composition_from_atoms(source_atoms)
+    declared = declared_source_edges(path, source_atoms)
     attempts: list[dict[str, Any]] = []
     admitted: list[dict[str, Any]] = []
 
@@ -497,6 +651,53 @@ def infer_bond_order_candidates(
         attempts.append(
             {
                 "engine": "rdkit_pdb_proximity",
+                "family": "geometry",
+                "status": "failed",
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+        )
+
+    try:
+        from .core.geometry_candidate import (
+            ENGINE_NAME as geometry_engine,
+            GeometryCandidateError,
+            build_geometry_simple_molecule,
+        )
+
+        molecule, geometry_meta = build_geometry_simple_molecule(
+            path, source_atoms
+        )
+        graph, mapping_audit = _chemical_graph(
+            molecule, source_atoms, engine=geometry_engine
+        )
+        candidate = _identity_from_smiles(
+            Chem.MolToSmiles(molecule, canonical=True, isomericSmiles=True)
+        )
+        candidate.update(
+            {
+                "engine": geometry_engine,
+                "family": "geometry",
+                "candidate_graph": graph,
+                "mapping_audit": mapping_audit,
+                "engine_version": geometry_meta.get("algorithm"),
+                "stereo_status": "unverified_removed",
+                "geometry_simple": geometry_meta,
+            }
+        )
+        _admit_candidate(candidate, source_composition, attempts, admitted)
+    except GeometryCandidateError as exc:
+        attempts.append(
+            {
+                "engine": "geometry_simple_local",
+                "family": "geometry",
+                "status": "not_admitted",
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+        )
+    except Exception as exc:
+        attempts.append(
+            {
+                "engine": "geometry_simple_local",
                 "family": "geometry",
                 "status": "failed",
                 "error": f"{type(exc).__name__}: {exc}",
@@ -588,16 +789,43 @@ def infer_bond_order_candidates(
             "candidate_graph": representative.get("candidate_graph"),
             "mapping_audit": representative.get("mapping_audit"),
         }
+        if isinstance(group["candidate_graph"], dict):
+            from .core.geometry_candidate import bond_length_consistency
+
+            group["geometry_consistency"] = bond_length_consistency(
+                group["candidate_graph"]
+            )
+        else:
+            group["geometry_consistency"] = {
+                "inconsistent_bond_count": None,
+                "max_residual_angstrom": None,
+                "flagged": False,
+            }
         group["candidate_id"] = _candidate_id(group)
+        group["declared_edge_coverage"] = declared_edge_coverage(
+            members, declared
+        )
         identity_groups.append(group)
 
     def rank(group: dict[str, Any]) -> tuple[Any, ...]:
         return (
             -int(group["independent_family_count"]),
+            # A candidate whose best graph-bearing member drops a
+            # source-declared covalent edge (CONECT/LINK 1555, e.g. a
+            # macrocycle closure) must not outrank a group that preserves
+            # every declared edge, regardless of family trust.  Groups with
+            # no declared edges in the source (covered=True by definition)
+            # are unaffected.
+            int(not group["declared_edge_coverage"]["covered"]),
             min(
                 _FAMILY_PRIORITY.get(family, 99)
                 for family in group["supporting_families"]
             ),
+            # Demote graphs whose assigned orders demonstrably contradict the
+            # observed bond lengths (e.g. uniform single-bond proximity graphs
+            # on carbonyl/aromatic inputs) below every group without positive
+            # inconsistency evidence.  Never demotes on missing evidence.
+            int(bool(group.get("geometry_consistency", {}).get("flagged"))),
             -int(group["engine_count"]),
             min(
                 _ENGINE_PRIORITY.get(engine, 99)
@@ -643,6 +871,8 @@ def infer_bond_order_candidates(
         "selection_tied": selection_tied,
         "identity_groups": public_groups,
         "engine_attempts": attempts,
+        "declared_source_edge_count": len(declared),
+        "declared_source_edges": declared,
         "openbabel_available": any(
             attempt["engine"] == "openbabel_pdb"
             and attempt["status"] in {"admitted", "rejected"}

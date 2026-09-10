@@ -133,7 +133,14 @@ def monomer_symbol_hints(
 
 
 def _coordinate_symbol_hints(path: Path) -> tuple[str, ...]:
-    """Read component identifiers only; never infer bonds or identities."""
+    """Read component identifiers only; never infer bonds or identities.
+
+    Coordinate inputs yield polymer residue names plus HETATM caps/linkers
+    that carry actual peptide-connection evidence (LINK/CONECT to a peptide
+    residue, or a recognized cap/linker signature sequence-adjacent in the
+    same chain).  Unrelated ligands, waters, and ions without that evidence
+    are never hinted; nothing here triggers a network fetch by itself.
+    """
     if not path.is_file():
         return ()
     lower = path.name.lower()
@@ -151,33 +158,163 @@ def _coordinate_symbol_hints(path: Path) -> tuple[str, ...]:
         except Exception:
             return ()
     opener = gzip.open if lower.endswith(".gz") else open
-    residues: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    # key: (chain, resSeq, insertion code, residue name) in file order
+    residues: dict[tuple[str, int, str, str], dict[str, Any]] = {}
+    serial_to_key: dict[int, tuple[str, int, str, str]] = {}
+    link_pairs: set[tuple[tuple[str, int, str, str], tuple[str, int, str, str]]] = set()
+    conect_pairs: set[tuple[int, int]] = set()
+
+    def _link_partner(
+        name: str, chain: str, res_seq: str, icode: str
+    ) -> tuple[str, int, str, str] | None:
+        name = name.strip()
+        if not name:
+            return None
+        try:
+            number = int(res_seq)
+        except ValueError:
+            return None
+        return (chain.strip(), number, icode.strip(), name)
+
     try:
         with opener(path, "rt", encoding="ascii", errors="replace") as handle:
             for line in handle:
                 if line.startswith(("ATOM  ", "HETATM")):
+                    try:
+                        serial = int(line[6:11])
+                        residue_number = int(line[22:26])
+                    except ValueError:
+                        continue
                     value = line[17:20].strip()
-                    if value:
-                        key = (
-                            line[21:22],
-                            line[22:26],
-                            line[26:27],
-                            value,
+                    if not value:
+                        continue
+                    key = (
+                        line[21:22].strip(),
+                        residue_number,
+                        line[26:27].strip(),
+                        value,
+                    )
+                    row = residues.setdefault(
+                        key,
+                        {"atoms": set(), "polymer": False, "hetatm": False},
+                    )
+                    row["atoms"].add(line[12:16].strip().upper())
+                    row["polymer"] = (
+                        row["polymer"] or line.startswith("ATOM  ")
+                    )
+                    row["hetatm"] = row["hetatm"] or line.startswith("HETATM")
+                    serial_to_key[serial] = key
+                    continue
+                if line.startswith("LINK"):
+                    partners = [
+                        partner
+                        for partner in (
+                            _link_partner(
+                                line[17:20], line[21:22],
+                                line[22:26], line[26:27],
+                            ),
+                            _link_partner(
+                                line[47:50], line[51:52],
+                                line[52:56], line[56:57],
+                            ),
                         )
-                        row = residues.setdefault(
-                            key, {"atoms": set(), "polymer": False}
-                        )
-                        row["atoms"].add(line[12:16].strip().upper())
-                        row["polymer"] = (
-                            row["polymer"] or line.startswith("ATOM  ")
-                        )
+                        if partner is not None
+                    ]
+                    for left in range(len(partners)):
+                        for right in range(left + 1, len(partners)):
+                            if partners[left] != partners[right]:
+                                link_pairs.add((partners[left], partners[right]))
+                    continue
+                if line.startswith("CONECT"):
+                    values: list[int] = []
+                    for start in range(6, min(len(line.rstrip("\r\n")), 71), 5):
+                        field = line[start : start + 5].strip()
+                        if not field:
+                            continue
+                        try:
+                            values.append(int(field))
+                        except ValueError:
+                            continue
+                    for index in range(1, len(values)):
+                        if values[0] != values[index]:
+                            conect_pairs.add(
+                                (min(values[0], values[index]), max(
+                                    values[0], values[index]
+                                ))
+                            )
     except OSError:
         return ()
+
+    def is_peptide(key: tuple[str, int, str, str]) -> bool:
+        row = residues.get(key)
+        return bool(
+            row
+            and (row["polymer"] or {"N", "CA", "C"}.issubset(row["atoms"]))
+        )
+
+    peptide_keys = {key for key in residues if is_peptide(key)}
+    solvent = {"HOH", "DOD", "WAT"}
+
+    # Graph evidence: a LINK record (or a cross-residue CONECT edge) pairing
+    # a peptide residue with a non-peptide HETATM residue marks the latter as
+    # a connected cap/linker (e.g. ACE caps, AEA-style macrocycle linkers).
+    connected: set[tuple[str, int, str, str]] = set()
+
+    def mark_connected(pairs: Iterable) -> None:
+        for left, right in pairs:
+            if is_peptide(left) == is_peptide(right):
+                continue
+            for one, other in ((left, right), (right, left)):
+                row = residues.get(one)
+                if (
+                    is_peptide(other)
+                    and row
+                    and row["hetatm"]
+                    and one[3] not in solvent
+                ):
+                    connected.add(one)
+
+    mark_connected(
+        (left, right)
+        for left, right in link_pairs
+        if left in residues and right in residues
+    )
+    mark_connected(
+        pair
+        for pair in (
+            (
+                serial_to_key.get(left_serial),
+                serial_to_key.get(right_serial),
+            )
+            for left_serial, right_serial in conect_pairs
+        )
+        if pair[0] is not None and pair[1] is not None and pair[0] != pair[1]
+    )
+
+    # Context evidence for files whose LINK records were stripped: recognized
+    # cap names (ACE, NME) or a linker atom signature (N1+C1+C5, e.g. AEA)
+    # sequence-adjacent (resSeq +/- 1) to a peptide residue in the same chain.
+    peptide_numbers_by_chain: dict[str, set[int]] = {}
+    for key in peptide_keys:
+        peptide_numbers_by_chain.setdefault(key[0], set()).add(key[1])
+    adjacent_caps: set[tuple[str, int, str, str]] = set()
+    for key, row in residues.items():
+        if is_peptide(key) or not row["hetatm"] or key[3] in solvent:
+            continue
+        signature = (
+            key[3] in {"ACE", "NME"}
+            or {"N1", "C1", "C5"}.issubset(row["atoms"])
+        )
+        if not signature:
+            continue
+        neighbors = peptide_numbers_by_chain.get(key[0], set())
+        if any(abs(key[1] - number) == 1 for number in neighbors):
+            adjacent_caps.add(key)
+
     values = [
         key[3]
-        for key, row in residues.items()
-        if row["polymer"]
-        or {"N", "CA", "C"}.issubset(row["atoms"])
+        for key in residues
+        if is_peptide(key) or key in connected or key in adjacent_caps
     ]
     return tuple(dict.fromkeys(values))
 

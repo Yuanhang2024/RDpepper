@@ -8,6 +8,7 @@ from typing import Optional, Tuple
 
 EXHAUSTIVENESS = 32
 NUM_MODES = 9
+VINA_MODES = ("docking", "score_only", "local_only")
 
 
 def find_vina() -> Optional[str]:
@@ -46,6 +47,25 @@ def parse_vina_affinity(vina_stdout: str) -> Optional[float]:
                             continue
                         if mode > 0 and math.isfinite(affinity):
                             return affinity
+    return None
+
+
+def parse_vina_score_only_energy(vina_stdout: str) -> Optional[float]:
+    """Parse the reported binding energy from --score_only/--local_only stdout.
+
+    Vina 1.2.7 prints "Estimated Free Energy of Binding : <value> (kcal/mol)"
+    for both modes instead of the ranked mode table emitted by a docking run.
+    """
+    for line in vina_stdout.split("\n"):
+        if "Estimated Free Energy of Binding" not in line:
+            continue
+        for token in line.split(":", 1)[-1].split():
+            try:
+                value = float(token)
+            except ValueError:
+                continue
+            if math.isfinite(value):
+                return value
     return None
 
 
@@ -243,6 +263,11 @@ def run_vina(
     exhaustiveness: int = EXHAUSTIVENESS,
     num_modes: int = NUM_MODES,
     *,
+    seed: Optional[int] = None,
+    cpu: Optional[int] = None,
+    max_evals: Optional[int] = None,
+    timeout_seconds: float = 600,
+    mode: str = "docking",
     find_executable=find_vina,
     run_process=subprocess.run,
     timeout_error=subprocess.TimeoutExpired,
@@ -251,8 +276,35 @@ def run_vina(
     """Run Vina using injectable process seams for the compatibility facade.
 
     Success requires a freshly written, non-empty, minimally parseable output
-    PDBQT; stale or unparseable output is rejected with an error.
+    PDBQT; stale or unparseable output is rejected with an error. ``mode``
+    selects the Vina operation: ``docking`` (global search, default),
+    ``score_only`` (score the input pose; Vina writes no output file, so
+    ``--out`` is not passed and the output path is never created, cleared,
+    or removed), or ``local_only`` (local refinement of the input pose; a
+    verified fresh output PDBQT is required, as in docking).
     """
+    if not isinstance(mode, str) or mode not in VINA_MODES:
+        return None, (
+            "Invalid Vina mode: "
+            f"{mode!r}; expected one of {', '.join(VINA_MODES)}"
+        )
+    controls = {}
+    try:
+        for name, value in (("seed", seed), ("cpu", cpu), ("max_evals", max_evals)):
+            if value is None:
+                continue
+            if isinstance(value, bool) or int(value) != value:
+                raise ValueError(f"{name} must be an integer")
+            controls[name] = int(value)
+        if any(value < 0 for value in controls.values()):
+            raise ValueError("seed, cpu and max_evals must be non-negative")
+        if isinstance(timeout_seconds, bool):
+            raise ValueError("timeout_seconds must be positive and finite")
+        timeout_seconds = float(timeout_seconds)
+        if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be positive and finite")
+    except (TypeError, ValueError, OverflowError) as exc:
+        return None, f"Invalid Vina execution controls: {exc}"
     caller_cwd = os.getcwd()
     resolved_ligand = os.path.abspath(os.path.join(caller_cwd, ligand_pdbqt))
     resolved_receptor = os.path.abspath(os.path.join(caller_cwd, receptor_pdbqt))
@@ -271,7 +323,9 @@ def run_vina(
     except (TypeError, ValueError, OSError) as exc:
         return None, f"Cannot compare Vina input/output paths: {exc}"
 
-    clear_error = _clear_prior_output(resolved_output)
+    clear_error = None
+    if mode != "score_only":
+        clear_error = _clear_prior_output(resolved_output)
     if clear_error is not None:
         return None, clear_error
 
@@ -318,10 +372,17 @@ def run_vina(
         "--size_x", str(sx),
         "--size_y", str(sy),
         "--size_z", str(sz),
-        "--out", resolved_output,
+    ]
+    if mode != "score_only":
+        command.extend(["--out", resolved_output])
+    command.extend([
         "--exhaustiveness", str(exhaustiveness),
         "--num_modes", str(num_modes),
-    ]
+    ])
+    for name, value in controls.items():
+        command.extend([f"--{name}", str(value)])
+    if mode in ("score_only", "local_only"):
+        command.append(f"--{mode}")
     vina_cwd = os.path.dirname(resolved_executable) or None
     success = False
     try:
@@ -329,25 +390,31 @@ def run_vina(
             command,
             capture_output=True,
             text=True,
-            timeout=600,
+            timeout=timeout_seconds,
             cwd=vina_cwd,
         )
         if result.returncode != 0:
             return None, f"Vina failed (exit {result.returncode}): {result.stderr}"
-        affinity = parse_affinity(result.stdout)
+        if mode == "docking":
+            affinity = parse_affinity(result.stdout)
+        else:
+            affinity = parse_vina_score_only_energy(result.stdout)
         if affinity is None or not math.isfinite(affinity):
             return None, "Failed to parse affinity from Vina output"
-        output_error = _verify_vina_output(resolved_output, resolved_ligand)
-        if output_error is not None:
-            return None, output_error
+        if mode != "score_only":
+            output_error = _verify_vina_output(resolved_output, resolved_ligand)
+            if output_error is not None:
+                return None, output_error
         success = True
         return affinity, None
     except timeout_error:
-        return None, "Vina timed out (>10 min)"
+        if timeout_seconds == 600:
+            return None, "Vina timed out (>10 min)"
+        return None, f"Vina timed out (>{timeout_seconds:g} s)"
     except Exception as exc:
         return None, f"Vina execution error: {exc}"
     finally:
-        if not success:
+        if not success and mode != "score_only":
             try:
                 os.remove(resolved_output)
             except (FileNotFoundError, OSError):

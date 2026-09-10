@@ -21,7 +21,7 @@ from cycpep_master.paths.path_b import (
 import os
 import pytest
 
-_4INS = os.environ.get("RDPEPPER_TEST_4INS_PDB", "")
+_4INS = "E:/药物库/test_datasets/experimental_structures/cpdb_sample/4INS.pdb"
 _have_4ins = os.path.exists(_4INS)
 
 # Insulin A and B chains (4INS), HELM with three disulfides:

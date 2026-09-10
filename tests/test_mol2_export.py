@@ -306,8 +306,7 @@ def test_smiles_to_mol2_emits_tripos_not_mdl():
     block, error = smiles_to_mol2("CCO", random_seed=7)
 
     assert error is None
-    first_record = next(line for line in block.splitlines() if line.strip() and not line.startswith("#"))
-    assert first_record == "@<TRIPOS>MOLECULE"
+    assert block.startswith("@<TRIPOS>MOLECULE\n")
     assert "@<TRIPOS>ATOM" in block
     assert "@<TRIPOS>BOND" in block
     assert "V2000" not in block

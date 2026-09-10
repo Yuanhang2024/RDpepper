@@ -76,14 +76,18 @@ def _clear_output(path: Path) -> str | None:
 
 
 def _heavy_graph_snapshot(molecule: Chem.Mol) -> dict[str, Any]:
+    """Use heavy-atom ranks because hydrogen removal renumbers atom indices."""
     conformer = molecule.GetConformer()
     heavy_indices = [
         atom.GetIdx()
         for atom in molecule.GetAtoms()
         if atom.GetAtomicNum() > 1
     ]
+    heavy_rank = {
+        index: rank for rank, index in enumerate(heavy_indices)
+    }
     return {
-        "atom_indices": heavy_indices,
+        "heavy_atom_count": len(heavy_indices),
         "atomic_numbers": [
             molecule.GetAtomWithIdx(index).GetAtomicNum()
             for index in heavy_indices
@@ -102,8 +106,8 @@ def _heavy_graph_snapshot(molecule: Chem.Mol) -> dict[str, Any]:
         ],
         "bonds": sorted(
             (
-                min(bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()),
-                max(bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()),
+                min(heavy_rank[bond.GetBeginAtomIdx()], heavy_rank[bond.GetEndAtomIdx()]),
+                max(heavy_rank[bond.GetBeginAtomIdx()], heavy_rank[bond.GetEndAtomIdx()]),
                 str(bond.GetBondType()),
                 bool(bond.GetIsAromatic()),
             )
@@ -156,6 +160,170 @@ def _prepare_parent_molecule(
         "full_inchikey_before": parent.full_inchikey,
         "full_inchikey_after": completed_inchikey,
         "heavy_atom_invariants_valid": True,
+    }
+
+
+#: Atom property through which externally computed partial charges are
+#: handed to Meeko via ``MoleculePreparation(charge_model="read")``.
+CHARGE_FALLBACK_ATOM_PROP = "PartialCharge"
+
+#: Warning code emitted whenever the partial-charge model falls back.
+PARTIAL_CHARGE_FALLBACK_WARNING_CODE = (
+    "PARTIAL_CHARGE_MODEL_FALLBACK_OPENBABEL_GASTEIGER"
+)
+
+#: Charge model used for the produced PDBQT; reported verbatim in the
+#: audit so the emitted charges are never misattributed.
+CHARGE_MODEL_MEEKO_GASTEIGER = "meeko_gasteiger"
+CHARGE_MODEL_OPENBABEL_GASTEIGER = "openbabel_gasteiger"
+
+
+def _setup_has_nonfinite_partial_charges(setup) -> bool:
+    return any(
+        not math.isfinite(float(atom.charge))
+        for atom in setup.atoms
+        if not atom.is_ignore
+    )
+
+
+def _openbabel_gasteiger_charges(
+    molecule: Chem.Mol,
+) -> tuple[list[float] | None, dict[str, Any] | None, str | None]:
+    """Compute external partial charges without replacing the parent graph."""
+    try:
+        block = Chem.MolToMolBlock(molecule, kekulize=True)
+        roundtrip = Chem.MolFromMolBlock(block, sanitize=True, removeHs=False)
+        identity = Chem.MolToInchiKey(molecule)
+    except Exception as exc:
+        return None, None, f"Cannot serialize parent for charge fallback: {exc}"
+    if (
+        roundtrip is None
+        or Chem.MolToInchiKey(roundtrip) != identity
+    ):
+        return None, None, (
+            "SDF round-trip changed the molecular identity, so external "
+            "charges could not be bound to the parent atom order"
+        )
+    try:
+        from openbabel import openbabel as ob
+    except Exception as exc:
+        return None, None, f"OpenBabel unavailable: {exc}"
+    conversion = ob.OBConversion()
+    conversion.SetInAndOutFormats("sdf", "sdf")
+    ob_mol = ob.OBMol()
+    if (
+        not conversion.ReadString(ob_mol, block)
+        or ob_mol.NumAtoms() != molecule.GetNumAtoms()
+    ):
+        return None, None, "OpenBabel could not read the exported SDF block"
+    if [a.GetAtomicNum() for a in ob.OBMolAtomIter(ob_mol)] != [
+        atom.GetAtomicNum() for atom in molecule.GetAtoms()
+    ]:
+        return None, None, (
+            "OpenBabel atom order differs from the parent molecule"
+        )
+    ob_roundtrip = Chem.MolFromMolBlock(
+        conversion.WriteString(ob_mol), sanitize=True, removeHs=False
+    )
+    if (
+        ob_roundtrip is None
+        or Chem.MolToInchiKey(ob_roundtrip) != Chem.MolToInchiKey(molecule)
+        or [a.GetAtomicNum() for a in ob_roundtrip.GetAtoms()]
+        != [a.GetAtomicNum() for a in molecule.GetAtoms()]
+    ):
+        return None, None, "OpenBabel SDF round-trip changed the parent identity"
+    if _heavy_graph_snapshot(roundtrip) != _heavy_graph_snapshot(ob_roundtrip):
+        return None, None, "OpenBabel SDF round-trip changed ordered heavy atoms"
+    expected_coordinates = roundtrip.GetConformer()
+    observed_coordinates = ob_roundtrip.GetConformer()
+    if any(
+        (expected_coordinates.GetAtomPosition(i) - observed_coordinates.GetAtomPosition(i)).Length() > 0.0002
+        for i in range(molecule.GetNumAtoms())
+    ):
+        return None, None, "OpenBabel SDF round-trip changed per-atom coordinate order"
+    model = ob.OBChargeModel.FindType("gasteiger")
+    if model is None:
+        return None, None, "OpenBabel Gasteiger charge model unavailable"
+    if not model.ComputeCharges(ob_mol):
+        return None, None, "OpenBabel Gasteiger charge computation failed"
+    charges = [
+        float(atom.GetPartialCharge())
+        for atom in ob.OBMolAtomIter(ob_mol)
+    ]
+    if any(not math.isfinite(charge) for charge in charges):
+        return None, None, "OpenBabel Gasteiger charges are non-finite"
+    provenance = {
+        "fallback_method": (
+            "openbabel OBChargeModel 'gasteiger' partial charges, read "
+            "by Meeko charge_model='read'"
+        ),
+        "openbabel_release": str(ob.OBReleaseVersion()),
+        "identity_guard": "sdf_roundtrip_full_inchikey_equal",
+        "atom_order_guard": "ordered_heavy_graph_and_all_atom_coordinates_equal",
+        "graph_or_coordinates_modified": False,
+        "total_partial_charge": sum(charges),
+        "total_partial_charge_basis": "all OpenBabel atoms before Meeko nonpolar-H merging and PDBQT rounding",
+    }
+    return charges, provenance, None
+
+
+def _prepare_meeko_setup(
+    molecule: Chem.Mol,
+) -> tuple[Any, Any, dict[str, Any]]:
+    """Use Meeko charges, falling back to a recorded standard model if needed."""
+    from meeko import MoleculePreparation
+
+    preparator = MoleculePreparation(rigid_macrocycles=True)
+    setups = preparator.prepare(molecule)
+    if not setups:
+        raise RuntimeError("not_supported: Meeko produced no ligand setup")
+    setup = setups[0]
+    charge_audit: dict[str, Any] = {
+        "charge_model": CHARGE_MODEL_MEEKO_GASTEIGER,
+        "charge_fallback_applied": False,
+        "charge_fallback": None,
+    }
+    if not _setup_has_nonfinite_partial_charges(setup):
+        return preparator, setup, charge_audit
+    nonfinite_count = sum(
+        not math.isfinite(float(atom.charge))
+        for atom in setup.atoms
+        if not atom.is_ignore
+    )
+    charges, provenance, error = _openbabel_gasteiger_charges(molecule)
+    if charges is None:
+        raise RuntimeError(
+            "not_supported: Meeko Gasteiger partial charges are "
+            f"non-finite for {nonfinite_count} setup atom(s) and no "
+            f"finite standard-model fallback is available: {error}"
+        )
+    for atom, charge in zip(molecule.GetAtoms(), charges):
+        atom.SetDoubleProp(CHARGE_FALLBACK_ATOM_PROP, charge)
+    preparator = MoleculePreparation(
+        rigid_macrocycles=True,
+        charge_model="read",
+        charge_atom_prop=CHARGE_FALLBACK_ATOM_PROP,
+    )
+    setups = preparator.prepare(molecule)
+    if not setups:
+        raise RuntimeError(
+            "not_supported: Meeko produced no ligand setup after the "
+            "partial-charge fallback"
+        )
+    setup = setups[0]
+    if _setup_has_nonfinite_partial_charges(setup):
+        raise RuntimeError(
+            "not_supported: partial-charge fallback still produced "
+            "non-finite charges"
+        )
+    return preparator, setup, {
+        "charge_model": CHARGE_MODEL_OPENBABEL_GASTEIGER,
+        "charge_fallback_applied": True,
+        "charge_fallback": {
+            "trigger": "meeko_gasteiger_nonfinite_partial_charges",
+            "nonfinite_setup_atom_count": nonfinite_count,
+            **(provenance or {}),
+        },
     }
 
 
@@ -428,13 +596,11 @@ def mol2_to_ligand_pdbqt(
         unsupported = _unsupported_ligand_error(molecule)
         if unsupported:
             return None, unsupported
-        from meeko import MoleculePreparation, PDBQTWriterLegacy
+        from meeko import PDBQTWriterLegacy
 
-        preparator = MoleculePreparation(rigid_macrocycles=True)
-        setups = preparator.prepare(molecule)
-        if not setups:
-            return None, "not_supported: Meeko produced no ligand setup"
-        baseline_setup = setups[0]
+        preparator, baseline_setup, charge_audit = _prepare_meeko_setup(
+            molecule
+        )
         baseline_snapshot = setup_atom_snapshot(baseline_setup)
         initial_torsdof = torsdof_from_setup(baseline_setup)
         baseline_text, baseline_tree, parent_setup_audit = _serialize_setup(
@@ -464,6 +630,7 @@ def mol2_to_ligand_pdbqt(
             "inherited_quality": parent.quality,
             **parent_audit,
             **parent_setup_audit,
+            **charge_audit,
             "initial_torsdof": initial_torsdof,
             "flexibility_mode": requested_mode,
             "requested_flexibility_mode": requested_mode,
@@ -491,9 +658,18 @@ def mol2_to_ligand_pdbqt(
                 ensemble_manifest_sha256
             ),
             "embedding_performed": False,
-            "flexibility_warning_codes": (
-                [downgrade_code] if downgrade_code else []
-            ),
+            "flexibility_warning_codes": [
+                code
+                for code in (
+                    downgrade_code,
+                    (
+                        PARTIAL_CHARGE_FALLBACK_WARNING_CODE
+                        if charge_audit["charge_fallback_applied"]
+                        else None
+                    ),
+                )
+                if code
+            ],
             "legacy_generation_parameters_ignored": {
                 "ensemble_size": ensemble_size,
                 "random_seed": random_seed,

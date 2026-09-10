@@ -15,9 +15,11 @@ __all__ = [
     "UnifiedReconstructionResult",
     "application",
     "exact_v1_equivalent",
+    "load_mol2",
     "map_to_exact_v1",
     "monomer_resolution_context",
     "prepare_ligand_from_sequence",
+    "read_mol2",
     "reconstruct_structure",
     "resolve_monomers",
 ]
@@ -32,9 +34,11 @@ def __getattr__(name: str):
         "CyclicPeptideGraph",
         "UnifiedReconstructionResult",
         "exact_v1_equivalent",
+        "load_mol2",
         "map_to_exact_v1",
         "monomer_resolution_context",
         "prepare_ligand_from_sequence",
+        "read_mol2",
         "reconstruct_structure",
         "resolve_monomers",
     }:

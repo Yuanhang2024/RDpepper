@@ -377,6 +377,7 @@ def build_molecule_from_sequence(
     formal_charge = None
     error = None
     microstate_inferred = False
+    microstate_report = None
     if exact["exactness_status"] == EXACT:
         try:
             smiles = exact_v1_to_smiles(exact)
@@ -390,11 +391,13 @@ def build_molecule_from_sequence(
             if policy in {"registry_default", "preserve"}:
                 pass
             elif policy in {"physiological", "ph7.4", "ph74"}:
-                from .docking.protonation import protonate_ph74
+                from .docking.protonation import protonate_molecule_ph74
 
-                smiles = protonate_ph74(smiles)
+                assigned, microstate_report = protonate_molecule_ph74(parent_molecule)
+                smiles = Chem.MolToSmiles(assigned)
                 microstate_inferred = True
                 warnings.append("PHYSIOLOGICAL_MICROSTATE_HEURISTIC")
+                warnings.extend(microstate_report.get("warnings", []))
             else:
                 raise ValueError(
                     "protonation must be registry_default or physiological"
@@ -493,6 +496,7 @@ def build_molecule_from_sequence(
             "error": error,
             "symbolic_graph": graph_payload["symbolic_graph"],
             "monomer_resolution": resolution_snapshot,
+            **({"microstate": microstate_report} if microstate_report is not None else {}),
         },
         claim_boundary=ClaimBoundary(
             allowed=(

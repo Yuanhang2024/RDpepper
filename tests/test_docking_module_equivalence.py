@@ -160,7 +160,7 @@ def test_protonation_matches_release_021_and_direct_module(source, expected):
     assert protonation.protonate_ph74(source) == expected
 
 
-def test_receptor_pdbqt_bytes_match_facade_direct_module_and_release_021(tmp_path):
+def test_receptor_pdbqt_facade_matches_direct_with_explicit_polar_hydrogens(tmp_path):
     receptor = tmp_path / "receptor.pdb"
     facade_output = tmp_path / "facade.pdbqt"
     direct_output = tmp_path / "direct.pdbqt"
@@ -179,19 +179,18 @@ def test_receptor_pdbqt_bytes_match_facade_direct_module_and_release_021(tmp_pat
         is None
     )
 
-    expected_text = "\n".join(
-        (
-            "REMARK  rigid receptor PDBQT (cycpep_master)",
-            "ATOM      1 N    GLY A   1       0.000   0.000   0.000  1.00  0.00    -0.328 N ",
-            "ATOM      2 CA   GLY A   1       1.400   0.000   0.000  1.00  0.00     0.016 C ",
-            "ATOM      3 C    GLY A   1       2.100   1.200   0.000  1.00  0.00     0.055 C ",
-            "ATOM      4 O    GLY A   1       1.600   2.300   0.000  1.00  0.00    -0.395 OA",
-            "TER",
-            "",
-        )
-    )
     assert facade_output.read_bytes() == direct_output.read_bytes()
-    assert facade_output.read_text(encoding="utf-8") == expected_text
+    text = facade_output.read_text(encoding="utf-8")
+    atoms = [line for line in text.splitlines() if line.startswith("ATOM  ")]
+    heavy = [line for line in atoms if line.split()[-1] != "HD"]
+    assert len(heavy) == 4
+    assert [line[12:16].strip() for line in heavy] == ["N", "CA", "C", "O"]
+    assert [tuple(float(line[start:end]) for start, end in ((30, 38), (38, 46), (46, 54))) for line in heavy] == [
+        (0.0, 0.0, 0.0), (1.4, 0.0, 0.0), (2.1, 1.2, 0.0), (1.6, 2.3, 0.0),
+    ]
+    assert any(line.split()[-1] == "HD" for line in atoms)
+    assert all(line.split()[-1] != "HS" for line in atoms)
+    assert "REMARK  hydrogens:" in text
 
 
 def test_box_centers_match_facade_direct_module_and_release_021(tmp_path):

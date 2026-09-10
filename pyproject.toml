@@ -1,14 +1,14 @@
 [build-system]
-requires = ["setuptools>=77.0.3"]
+requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta:__legacy__"
 
 [project]
 name = "rdpepper"
-version = "7.1.0"
+version = "7.2.0"
 description = "Evidence-graded cyclic-peptide graph reconstruction and validated MOL2-to-PDBQT preparation"
 readme = "README.md"
 license = "MIT"
-license-files = ["LICENSE", "NOTICE", "THIRD_PARTY_DATA.md", "licenses/*"]
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
 dependencies = [
     "rdkit==2026.3.3",
@@ -61,9 +61,9 @@ cycpep-v5-reproduce = "cycpep_master.v5_reproducibility:main"
 
 [project.urls]
 Homepage = "https://github.com/Yuanhang2024/RDpepper"
-Source = "https://github.com/Yuanhang2024/RDpepper"
+Documentation = "https://github.com/Yuanhang2024/RDpepper/blob/main/README.md"
 Issues = "https://github.com/Yuanhang2024/RDpepper/issues"
-Changelog = "https://github.com/Yuanhang2024/RDpepper/blob/main/RDPEPPER_RELEASE_NOTES.md"
+Source = "https://github.com/Yuanhang2024/RDpepper"
 
 [tool.setuptools]
 package-dir = {cycpep_master = ".", rdpepper = "rdpepper"}
@@ -84,14 +84,6 @@ packages = [
 [tool.setuptools.package-data]
 cycpep_master = [
     "THIRD_PARTY_DATA.md",
-    "MIGRATION_RDPEPPER.md",
-    "RDPEPPER_RELEASE_NOTES.md",
-    "EXACT_V1.md",
-    "EXACT_V1_MIGRATION.md",
-    "V5_ARTIFACT_CONTRACT.md",
-    "V5_REPRODUCIBILITY.md",
-    "NOTICE",
-    "ORIGINAL_SOURCE.json",
     "unified_monomer_library.csv",
     "special_residue_library.csv",
     "derived_monomer_library.csv",

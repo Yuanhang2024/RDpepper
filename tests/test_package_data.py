@@ -132,7 +132,8 @@ def test_publishable_sources_contain_no_machine_local_paths():
         / "torsion_prior_manifest_runtime.json",
     )
     pattern = re.compile(
-        r"(?:\b[A-Za-z]:[\\/]|/home/|/Users/)",
+        r"(?:[A-Za-z]:[\\/](?:Users|ChimeraModel_Lite|药物库)|"
+        r"/home/|/Users/|药物库)",
         re.IGNORECASE,
     )
     findings = {

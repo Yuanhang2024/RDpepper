@@ -207,6 +207,13 @@ def test_source_heavy_atom_mismatch_is_not_admitted(
             ValueError("RDKit candidate unavailable")
         ),
     )
+    from cycpep_master.core.geometry_candidate import GeometryCandidateError
+    monkeypatch.setattr(
+        "cycpep_master.core.geometry_candidate.build_geometry_simple_molecule",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            GeometryCandidateError("geometry candidate disabled in mismatch test")
+        ),
+    )
 
     report = bond_order_inference.infer_bond_order_candidates(
         path,

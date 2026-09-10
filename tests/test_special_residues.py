@@ -2,9 +2,9 @@
 
 These paths handle peptides containing special residues (stapled hydrocarbons,
 depsipeptide lactones, lanthionine thioethers) that have no unified-library
-template, where Paths A/B/C/E fail or drop atoms. Set
-``RDPEPPER_TEST_SPECIAL_RESIDUES_DIR`` to the optional test-data directory.
-Structure-dependent tests are skipped when their input files are absent.
+template, where Paths A/B/C/E fail or drop atoms. Test structures live under
+``E:/药物库/test_datasets/cyclization_chemistry`` and the suite is skipped if
+they are absent (so it passes in a minimal checkout).
 """
 import os
 
@@ -15,7 +15,7 @@ from rdkit.Chem import rdMolDescriptors
 from cycpep_master.paths import generate_f, generate_g, generate_h
 from cycpep_master.core import special_residues as sr
 
-_DIR = os.environ.get("RDPEPPER_TEST_SPECIAL_RESIDUES_DIR", "")
+_DIR = "E:/药物库/test_datasets/cyclization_chemistry"
 _P53 = os.path.join(_DIR, "stapled_p53_hydrocarbon_3v3b.pdb")
 _DAP = os.path.join(_DIR, "daptomycin_lactone_1t5n.pdb")
 _NISIN = os.path.join(_DIR, "nisin_lanthionine_1wco.pdb")

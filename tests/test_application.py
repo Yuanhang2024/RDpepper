@@ -28,6 +28,7 @@ PUBLIC_OPERATIONS = {
     "template_conformers",
     "admet",
     "protonate",
+    "protonate_mol2",
     "validate_mol2",
     "prepare_ligand_from_sequence",
     "prepare_ligand_pdbqt_from_mol2",

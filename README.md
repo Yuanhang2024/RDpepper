@@ -1,4 +1,4 @@
-# RDpepper 7.1.0
+# RDpepper 7.2.0
 
 RDpepper is an evidence-graded cheminformatics engine for cyclic peptides. It
 reconstructs an auditable chemical graph from protein-bound PDB/mmCIF
@@ -16,31 +16,36 @@ construction and perception.
 
 ## About this distribution
 
-This is the public GitHub distribution of RDpepper 7.1.0. Bundled
+This is the public GitHub distribution of RDpepper 7.2.0. Bundled
 third-party data keep their source licenses: the NNAA collection is
 CC BY-NC 4.0, the CycPeptMPDB subset is CC BY 4.0, the HELM-GPT monomer
 subset follows the HELM-GPT project MIT license, and structural
 templates/priors are CC BY 4.0. See `NOTICE` and `THIRD_PARTY_DATA.md`.
 
-The candidate is a documentation- and privacy-cleaned copy of the frozen
-source. Production Python code and runtime data are unchanged. The original
-frozen-source identity is recorded in `ORIGINAL_SOURCE.json` (source tree
-SHA-256
-`44ee88ab3a9ceda4ad0b8c384ab76d418e7c10fa59e1bceb61027aea308bba9a`);
-the public tree is not a byte-identical copy of the complete internal source
-tree. Version history: `RDPEPPER_RELEASE_NOTES.md`.
+As with the 7.1.0 distribution, the public tree is a documentation- and
+privacy-cleaned copy of the frozen internal source: production Python code and
+runtime data are unchanged, and the public tree is not a byte-identical copy
+of the complete internal source tree. The 7.1.0 public tree's frozen-source
+identity is recorded in `ORIGINAL_SOURCE.json` (source tree SHA-256
+`44ee88ab3a9ceda4ad0b8c384ab76d418e7c10fa59e1bceb61027aea308bba9a`). The
+7.2.0 source identity (clean source tree SHA-256
+`c61c6a48a86a9fd10afeafe78c490b7728fced06d180c3cd98ec1a6ea5bbcfed`) is
+recorded in the v7.2.0 GitHub release notes. Version history: the GitHub
+Releases page.
 
 The public distribution name, repository name, and new code entry points are
 `RDpepper` / `rdpepper`. For compatibility, the implementation package
 `cycpep_master`, the `cycpep` / `cycpep-gui` commands, and historical schema,
 artifact, and provenance identifiers remain valid and are not rewritten by the
-renaming (see `MIGRATION_RDPEPPER.md`).
+renaming.
 
 ## Requirements
 
-- **Python** >= 3.10 (declared package requirement). Release QA for 7.1.0 was
-  performed on CPython 3.14 under Windows; other versions and platforms have
-  not been systematically tested for this release.
+- **Python** >= 3.10 (declared package requirement). Release verification for
+  7.2.0 was performed on CPython 3.14 under Windows (compatibility suite plus
+  a four-case end-to-end docking-chain check); the full pytest gate was not
+  run for this release, and other versions and platforms have not been
+  systematically tested.
 - **Core dependencies** (installed automatically): RDKit 2026.3.3, Gemmi
   >= 0.7.0, pandas >= 2.0, numpy >= 1.24.
 
@@ -50,20 +55,17 @@ Install from this repository or from the wheel published on the
 Releases page. This release makes no claim about PyPI availability.
 
 ```bash
-# Option 1: directly install from PyPI
-pip install rdpepper
+# Option 1: wheel downloaded from the GitHub Releases page
+python -m pip install ./rdpepper-7.2.0-py3-none-any.whl
 
-# Option 2: wheel downloaded from the GitHub Releases page
-python -m pip install ./rdpepper-7.1.0-py3-none-any.whl
-
-# Option 3: from a checkout of this repository
+# Option 2: from a checkout of this repository
 python -m pip install .
 ```
 
 Optional features install as extras on the same command:
 
 ```bash
-python -m pip install "./rdpepper-7.1.0-py3-none-any.whl[inference,docking]"
+python -m pip install "./rdpepper-7.2.0-py3-none-any.whl[inference,docking]"
 python -m pip install ".[gui,admet]"
 ```
 
@@ -103,6 +105,17 @@ rdpepper convert --from map --to smiles '{nnr:7T2}AC'
 rdpepper prepare-sequence ACDEFG ./prepared \
   --cyclization head-to-tail --conformers 4 --flexibility-mode balanced
 
+# Read a validated MOL2 back into the RDKit graph layer (7.2.0)
+# Default is rdkit_native; rdkit_charge_aware is an opt-in compatibility mode
+# that restores the file's declared UNITY formal charges before RDKit
+# sanitization (it does not infer chemical correctness and is not protonation)
+rdpepper read-mol2 output.mol2 --receipt output.mol2.validation.json \
+  --compatibility rdkit_charge_aware --export-sdf output.sdf
+
+# Protonate a validated MOL2 to its pH 7.4 dominant microstate while
+# preserving heavy-atom coordinates (writes a new file)
+rdpepper protonate-mol2 output.mol2 output_ph74.mol2
+
 # Desktop workspace (requires the [gui] extra)
 rdpepper-gui
 ```
@@ -118,10 +131,11 @@ legacy `cycpep` / `cycpep-gui` commands use the same implementation.
 ```python
 import rdpepper
 
-print(rdpepper.__version__)          # "7.1.0"
+print(rdpepper.__version__)          # "7.2.0"
 
 # New code uses the facade; deep implementation modules stay cycpep_master.*
 from rdpepper import application, reconstruct_structure
+from rdpepper import read_mol2, load_mol2   # 7.2.0 MOL2 compatibility readers
 
 # Unified reconstruction: PDB/mmCIF paths or sequence/HELM/MAP/BILN text
 result = reconstruct_structure("input/example.pdb", chain_id="L", mode="auto")
@@ -180,6 +194,33 @@ and warnings.
 `allow_network` defaults to `false`; enabling it fetches only the specific
 unresolved component IDs from RCSB CCD. Extensions never mutate the packaged
 or user monomer library.
+
+## Reading validated MOL2 back (optional compatibility layer)
+
+7.2.0 adds an optional MOL2 compatibility reader for MOL2 files produced by
+earlier RDpepper runs (or other UNITY-style writers). The default mode
+`rdkit_native` keeps RDKit's own MOL2 perception. The opt-in
+`rdkit_charge_aware` mode restores the formal charges declared in the file's
+UNITY atom types before RDKit sanitization; it never infers chemical
+correctness and is not a protonation step. `--receipt` cross-checks the
+validation receipt written at export time, and `--export-sdf` writes an SDF
+artifact of the parsed graph. The same functionality is available from Python
+(`rdpepper.read_mol2` / `rdpepper.load_mol2`), from the CLI
+(`rdpepper read-mol2`), and in the GUI ("Protonation & MOL2" tab, "Read
+MOL2" group).
+
+`rdpepper protonate-mol2` applies the deterministic pH 7.4 dominant-microstate
+policy to a validated MOL2 while preserving heavy-atom coordinates. These are
+rule-based bookkeeping policies, not experimentally validated protonation or
+site-specific pKa prediction.
+
+## Docking diagnostics (7.2.0)
+
+`rdpepper vina` gained `--seed`, `--cpu`, `--max-evals`, `--timeout-seconds`,
+and `--mode {docking,score_only,local_only}` for reproducible runs and pose
+scoring/refinement diagnostics; `rdpepper pdbqt receptor` accepts an optional
+`--ph` generic residue-state policy. These options do not change the evidence
+model: docking outputs remain flexibility/pose evidence only.
 
 ## Evidence model
 
@@ -279,7 +320,8 @@ The package as a whole is not MIT. Full per-resource terms and attributions:
 
 ## Citation
 
-If RDpepper is useful in your research, please cite **RDpepper 7.1.0** as
-identified by this release and its `ORIGINAL_SOURCE.json` source-tree hash. A
-formal publication reference will accompany the manuscript; none is claimed
+If RDpepper is useful in your research, please cite **RDpepper 7.2.0** as
+identified by this release (source identity recorded in the v7.2.0 release
+notes; the 7.1.0 public tree hash remains recorded in `ORIGINAL_SOURCE.json`).
+A formal publication reference will accompany the manuscript; none is claimed
 here in advance.
