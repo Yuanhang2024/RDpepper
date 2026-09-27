@@ -1,0 +1,130 @@
+{
+  "schema_version": "1.0.0-cycpep-v5-qa.2",
+  "software": "CycPep Master",
+  "version": "5.0.1",
+  "generated_date": "2026-08-24",
+  "status": "PASS",
+  "source_policy": {
+    "git_commit_created": false,
+    "frozen_benchmark_outputs_modified_by_v501_work": false,
+    "frozen_torsion_manifest_modified": false,
+    "unified_monomer_truth_modified_by_v501_work": false,
+    "release_source": "current reviewed working tree"
+  },
+  "production_test": {
+    "command": "python -m pytest -q",
+    "passed": 1291,
+    "skipped": 24,
+    "warnings": 7,
+    "failed": 0,
+    "errors": 0,
+    "elapsed_seconds": 1327.69,
+    "warning_classes": [
+      "intentional unknown-LIG monomer diagnostics",
+      "intentional optimization-nonconvergence contract tests",
+      "intentional malformed-MAP diagnostic test"
+    ]
+  },
+  "post_full_packaging_tests": {
+    "passed": 15,
+    "failed": 0,
+    "scope": [
+      "package-data allowlist",
+      "runtime/frozen torsion-manifest binding",
+      "resource cache invalidation",
+      "reproducibility receipt",
+      "embedding ownership",
+      "retired CLI visibility"
+    ]
+  },
+  "review_remediation": {
+    "machine_local_paths_removed": true,
+    "v5_embedding_ownership_scope_corrected": true,
+    "all_production_embedding_calls_inventoried": true,
+    "embedding_attempt_timeout_seconds": 30,
+    "torsion_prior_cache_single_flight": true,
+    "torsion_prior_cache_immutable": true,
+    "strict_uncached_prior_reload_available": true,
+    "retired_cli_hidden": true,
+    "retired_gui_removed": true,
+    "retired_operation_removed_from_application_all": true,
+    "gui_workers_route_through_application": true,
+    "direct_materializer_tests_added": true,
+    "literal_abstain_regression_added": true,
+    "capabilities_version_added": true,
+    "docking_extra_declares_scipy": true
+  },
+  "performance": {
+    "torsion_prior_cold_load_seconds": 0.7407,
+    "torsion_prior_warm_load_seconds": 0.001158,
+    "observed_warm_speedup": 639.5,
+    "full_suite_previous_seconds": 2183.72,
+    "full_suite_v501_seconds": 1327.69
+  },
+  "exact_v1_compatibility": {
+    "report_path": "benchmarks/exact_v1_compatibility_report.json",
+    "report_sha256": "b392514d2890ef0fc072df3eda33c24e0d7a426f2ffd30aca30a20e972ad5ffc",
+    "records": 794,
+    "exact_records": 793,
+    "abstained_records": 1,
+    "abstained_identity": "15_none_syn_111",
+    "abstained_reason_codes": [
+      "MONOMER_STEREO_UNRESOLVED",
+      "CHAIN_MONOMER_RESOLUTION_INCOMPLETE"
+    ],
+    "map_helm_biln_roundtrip_records": 793,
+    "edge_v1_projected_records": 326,
+    "nnaa_exact_records": 44,
+    "nnaa_records": 45,
+    "multiring_exact_records": 9,
+    "multiring_records": 9
+  },
+  "runtime_resources": {
+    "template_index_sha256": "179aae8a4280270c44f200242f82a26f0a12d6edbe7b70fcd096017d98ba4eb4",
+    "frozen_torsion_prior_manifest_sha256": "8bb65489651d39edcad5cc5355fc8db44156ebe36b9be5779f9bba2761a8c003",
+    "packaged_torsion_prior_manifest_sha256": "1dadb4cbd86fc5548dd7df1d760c1bf3a40781578e019e01627ad45d7d2d8816",
+    "torsion_prior_source_file_count": 578375,
+    "torsion_prior_source_success_count": 578345,
+    "torsion_prior_source_not_supported_count": 30
+  },
+  "wheel": {
+    "filename": "cycpep_master-5.0.1-py3-none-any.whl",
+    "sha256": "d89e5deb4d0cb4f3a2c6bdeb2818786613e89efb8a438c089a3430d1596e6a27",
+    "clean_windows_install_passed": true,
+    "installed_version": "5.0.1",
+    "installed_v5_resources_available": true,
+    "installed_exact_v1_smoke": "EXACT",
+    "installed_sequence_smoke": "PDBQT_COMPLETE",
+    "machine_local_path_hits": 0,
+    "temporary_or_probe_entries": 0,
+    "frozen_manifest_packaged": false,
+    "sanitized_runtime_manifest_packaged": true
+  },
+  "linux_smoke": {
+    "environment": "WSL Ubuntu 24.04, Python 3.12",
+    "wheel_install_passed": true,
+    "sequence_status": "PDBQT_COMPLETE",
+    "docking_extra_dependency_gap_found_and_fixed": "scipy",
+    "input_artifact_id_matches_windows": true,
+    "chemical_graph_artifact_id_matches_windows": true,
+    "coordinate_and_pdbqt_byte_identity_claimed": false,
+    "dgx_smoke_status": "not_run_authentication_denied"
+  },
+  "claim_boundary": {
+    "validated": [
+      "typed artifact integrity",
+      "sequence chemical graph materialization",
+      "validated MOL2 ensemble production",
+      "validated MOL2 to PDBQT format preparation",
+      "mechanistic torsion-budget evidence",
+      "Windows and Linux installability"
+    ],
+    "not_validated": [
+      "cross-platform generated-coordinate byte identity",
+      "experimental 3D accuracy",
+      "biological flexibility",
+      "docking pose improvement",
+      "binding affinity improvement"
+    ]
+  }
+}

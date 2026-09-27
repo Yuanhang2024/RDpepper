@@ -1,0 +1,412 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ChimeraModel/cycpep_master/schemas/exact_v1.schema.json",
+  "title": "CycPep Master exact_v1 monomer-port graph",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "monomers",
+    "bonds",
+    "caps",
+    "chain_breaks",
+    "canonical_order",
+    "original_to_canonical",
+    "canonical_to_original",
+    "graph_sha256",
+    "exactness_status",
+    "reason_codes",
+    "normalization_codes",
+    "projection_trace",
+    "source_kind"
+  ],
+  "properties": {
+    "schema": {
+      "const": "cycpep_exact_v1"
+    },
+    "monomers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/monomer"
+      }
+    },
+    "bonds": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/bond"
+      }
+    },
+    "caps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/cap"
+      }
+    },
+    "chain_breaks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "left_chain_id",
+          "right_chain_id"
+        ],
+        "properties": {
+          "left_chain_id": {
+            "$ref": "#/$defs/nonemptyString"
+          },
+          "right_chain_id": {
+            "$ref": "#/$defs/nonemptyString"
+          }
+        }
+      }
+    },
+    "canonical_order": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "uniqueItems": true
+    },
+    "original_to_canonical": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 1
+      }
+    },
+    "canonical_to_original": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/nonemptyString"
+      }
+    },
+    "graph_sha256": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/sha256"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "exactness_status": {
+      "enum": [
+        "EXACT",
+        "ABSTAIN"
+      ]
+    },
+    "reason_codes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/nonemptyString"
+      },
+      "uniqueItems": true
+    },
+    "normalization_codes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/nonemptyString"
+      },
+      "uniqueItems": true
+    },
+    "projection_trace": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/projectionTrace"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "source_kind": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "exactness_status": {
+            "const": "EXACT"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "monomers": {
+            "minItems": 1
+          },
+          "graph_sha256": {
+            "$ref": "#/$defs/sha256"
+          },
+          "reason_codes": {
+            "maxItems": 0
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "monomers": {
+            "maxItems": 0
+          },
+          "bonds": {
+            "maxItems": 0
+          },
+          "caps": {
+            "maxItems": 0
+          },
+          "chain_breaks": {
+            "maxItems": 0
+          },
+          "canonical_order": {
+            "maxItems": 0
+          },
+          "graph_sha256": {
+            "type": "null"
+          },
+          "reason_codes": {
+            "minItems": 1
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "nonemptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "port": {
+      "enum": [
+        "R1",
+        "R2",
+        "R3"
+      ]
+    },
+    "atom": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "endpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "node_id",
+        "port",
+        "atom"
+      ],
+      "properties": {
+        "node_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "port": {
+          "$ref": "#/$defs/port"
+        },
+        "atom": {
+          "$ref": "#/$defs/atom"
+        }
+      }
+    },
+    "monomer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "node_id",
+        "monomer_id",
+        "monomer_symbol",
+        "stereo",
+        "modifications",
+        "chain_id",
+        "canonical_position",
+        "original_chain_id",
+        "original_position"
+      ],
+      "properties": {
+        "node_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "monomer_id": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "monomer_symbol": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "stereo": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "modifications": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/nonemptyString"
+          }
+        },
+        "chain_id": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "canonical_position": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "original_chain_id": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "original_position": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "bond": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bond_type",
+        "src",
+        "dst",
+        "bond_order"
+      ],
+      "properties": {
+        "bond_type": {
+          "enum": [
+            "PEPTIDE",
+            "HT",
+            "SS",
+            "ISOPEPTIDE",
+            "ESTER",
+            "THIOETHER",
+            "HSC",
+            "SIDECHAIN",
+            "SIDECHAIN_TO_TAIL",
+            "ALKYL",
+            "CROSSLINK"
+          ]
+        },
+        "src": {
+          "$ref": "#/$defs/endpoint"
+        },
+        "dst": {
+          "$ref": "#/$defs/endpoint"
+        },
+        "bond_order": {
+          "const": "SINGLE"
+        }
+      }
+    },
+    "cap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cap_id",
+        "monomer_id",
+        "monomer_symbol",
+        "chain_id",
+        "terminus",
+        "port",
+        "atom",
+        "target_node_id",
+        "target_port",
+        "target_atom"
+      ],
+      "properties": {
+        "cap_id": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "monomer_id": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "monomer_symbol": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "chain_id": {
+          "$ref": "#/$defs/nonemptyString"
+        },
+        "terminus": {
+          "enum": [
+            "N",
+            "C"
+          ]
+        },
+        "port": {
+          "$ref": "#/$defs/port"
+        },
+        "atom": {
+          "$ref": "#/$defs/atom"
+        },
+        "target_node_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "target_port": {
+          "$ref": "#/$defs/port"
+        },
+        "target_atom": {
+          "$ref": "#/$defs/atom"
+        }
+      }
+    },
+    "projectionTrace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_kind",
+        "operations"
+      ],
+      "properties": {
+        "source_kind": {
+          "enum": [
+            "edge_v1",
+            "legacy_v5"
+          ]
+        },
+        "operations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "bond_type",
+              "src",
+              "dst"
+            ],
+            "properties": {
+              "bond_type": {
+                "enum": [
+                  "HT",
+                  "SS",
+                  "SC",
+                  "EST",
+                  "HSC",
+                  "THIO",
+                  "ALK"
+                ]
+              },
+              "src": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "dst": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

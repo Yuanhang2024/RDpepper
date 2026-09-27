@@ -1,0 +1,23 @@
+# Full all-features development environment. For a minimal or selective
+# installation, use pyproject extras such as .[gui] or .[docking].
+# Core
+rdkit==2026.3.3
+gemmi>=0.7.0
+pandas>=2.0
+numpy>=1.24
+
+# Benchmark competitors (BIRD benchmark, optional but needed to reproduce §3c)
+openbabel-wheel>=3.1.1.1
+
+# Optional: ADMET prediction (admet module)
+admet-ai>=0.1.0
+
+# Optional: 3D docking (docking module)
+meeko>=0.6.1
+
+# Optional: graphical interface (gui module)
+PyQt5>=5.15
+
+# Dev / test
+pytest>=7.0
+jsonschema>=4.18

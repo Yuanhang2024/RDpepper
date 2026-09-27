@@ -1,0 +1,13 @@
+HEADER    FAIL CLOSED FCV2-INV-PDB-001
+ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00 20.00           N  
+ATOM      2  CA  ALA A   1       1.450   0.000   0.000  1.00 20.00           C  
+ATOM      3  C   ALA A   1       2.150   1.300   0.000  1.00 20.00           C  
+ATOM      4  O   ALA A   1       1.650   2.400   0.000  1.00 20.00           O  
+ATOM      5  N   GLY A   2       3.450   1.200   0.000  1.00 20.00           N  
+ATOM      6  CA  GLY A   2       4.200   2.400   0.000  1.00 20.00           C  
+ATOM      7  N   SER A   3       5.500   2.300   0.000  1.00 20.00           N  
+ATOM      8  N   VAL A   4       6.700   2.200   0.000  1.00 20.00           N  
+ATOM      9  SG  CYS A   5       7.900   2.100   0.000  1.00 20.00           S  
+LINK           C ALA A   1                   N VAL A   4     1555   1555  1.33
+CONECT    3    7
+END

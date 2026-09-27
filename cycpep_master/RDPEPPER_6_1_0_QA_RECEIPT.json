@@ -1,0 +1,31 @@
+{
+  "cleanup_6_1_0": [
+    "removed build_v5_release.py (superseded 5.0.1 bundle builder)",
+    "removed top-level test_vina_wrapper.py (stray script)",
+    "removed demo_max_coverage.py (demo; unregistered embed call site)",
+    "removed V5_RELEASE_NOTES.md (unreferenced; superseded by RDPEPPER_RELEASE_NOTES.md)",
+    "removed stale setuptools build/ tree and old dist/"
+  ],
+  "delta_6_1_0": {
+    "ablation": "candidate028: 338/343 not_supported -> X2; record coverage 1223/1571 -> 1561/1571",
+    "default_behavior": "strict_v6, byte-identical to 6.0.0",
+    "fallback_module": "cycpep_master/max_coverage.py (12 unit tests)",
+    "public_surface": [
+      "export.conformer.pdb_to_mol2(fallback_policy=...)",
+      "application.export_structure(fallback_policy=...)",
+      "CLI export --fallback-policy {strict_v6,max_coverage}"
+    ]
+  },
+  "distribution": "rdpepper",
+  "packaging_status": "PASS",
+  "predecessor_receipt": "RDPEPPER_5_1_0_QA_RECEIPT.json",
+  "publication_status": "HOLD_DATA_LICENSE",
+  "schema_version": "1.0.0-rdpepper-qa-receipt.2",
+  "test_suite": {
+    "command": "python -m pytest tests -q",
+    "note": "run on 2026-08-27/28 after the 6.1.0 fallback wiring; the embedding-ownership guard was updated to register the pdb_to_mol2 fallback ETKDG call site and re-passed after cleanup of the stray demo script",
+    "result": "1344 passed, 24 skipped, 0 failed"
+  },
+  "upload_authorized": false,
+  "version": "6.1.0"
+}

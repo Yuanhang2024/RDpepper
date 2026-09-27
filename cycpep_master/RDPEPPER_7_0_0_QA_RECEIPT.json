@@ -1,0 +1,71 @@
+{
+  "archive_boundary": {
+    "benchmarks_in_current_source": 0,
+    "benchmarks_in_sdist": 0,
+    "benchmarks_in_wheel": 0,
+    "current_source_member_count": 1067,
+    "current_source_test_members": 131,
+    "forbidden_nul_members": 0,
+    "private_user_library_members": 0,
+    "sdist_member_count": 1000,
+    "sdist_test_members": 0,
+    "wheel_member_count": 923,
+    "wheel_test_members": 0
+  },
+  "artifacts": {
+    "current_source": {
+      "path": "rdpepper-7.0.0-current-source.zip",
+      "sha256": "0e17b39bc00343da2e81d0752b2b6fab2eedeb6a69bf60a05f7edf33f7611645",
+      "size": 12053812
+    },
+    "sdist": {
+      "path": "rdpepper-7.0.0.tar.gz",
+      "sha256": "940ac03525f0dd774775d1ce99f1cfe60ff0b45569913f44bd3d38b4cfd9cfa9",
+      "size": 10283878
+    },
+    "wheel": {
+      "path": "rdpepper-7.0.0-py3-none-any.whl",
+      "sha256": "44da92a767c1499eff534d0c962b5629e1f1368766b807c59ef93256ec13b375",
+      "size": 10913702
+    }
+  },
+  "clean_install": {
+    "capabilities_status": "success",
+    "entry_point_count": 8,
+    "facade_object_identity": true,
+    "package_data_complete": true,
+    "pip_check": "PASS_NO_BROKEN_REQUIREMENTS",
+    "receipt_sha256": "31d4da6be2bdb4b2dab2571fbee312fa06a6b2ca3d8b13c50ac81aa79eb68d0c",
+    "status": "PASS",
+    "version": "7.0.0"
+  },
+  "formal_benchmark_status": "NOT_RERUN_FOR_7.0.0",
+  "packaging_status": "PASS",
+  "predecessor_receipt": "RDPEPPER_6_1_0_QA_RECEIPT.json",
+  "publication_status": "HOLD_DATA_LICENSE",
+  "release_profile": "LOCAL_PYTHON_DISTRIBUTION_BUNDLE",
+  "schema_version": "1.0.0-rdpepper-qa-receipt.3",
+  "scientific_claims": {
+    "benchmark_accuracy_claims_added": false,
+    "benchmark_coverage_claims_added": false,
+    "benchmark_runtime_claims_added": false,
+    "historical_frozen_results_modified": false
+  },
+  "software": "RDpepper",
+  "source_baseline_sha256": "7df08d4803c38930a041e8aa0c17fc1edeb80b4dd706fcf28f95638781dc40a4",
+  "test_suite": {
+    "command": "python -B -m pytest cycpep_master/tests -q --tb=short -p no:cacheprovider --import-mode=importlib",
+    "duration_sec": 11718.286276,
+    "failed": 0,
+    "passed": 1386,
+    "pytest_gate_sha256": "a57b94102d05dd88e77dbd3d8058b66aae8bae4676e0c79ee8c558806528a4dd",
+    "pytest_stdout_sha256": "550267f8e6f8ff5d0d355aef43f6c09ba24eb2ef43c74b65922190f04898497a",
+    "skipped": 27,
+    "source_file_count": 1079,
+    "source_tree_sha256": "1b5daebe314ecb2554e4123127e5b54f0183b690e2e614038378b52d56a54ac0",
+    "source_unchanged": true,
+    "status": "PASS"
+  },
+  "upload_authorized": false,
+  "version": "7.0.0"
+}

@@ -1,0 +1,90 @@
+REMARK 900 SYNTHETIC COORDINATE-SERIALIZATION GOLD V2 CASE 02
+REMARK 901 GENERATED WITH RDKIT 2026.03.3; NOT AN EXPERIMENTAL PDB
+ATOM      1  N   PHE A   1      -4.011  -0.659  -0.674  1.00  0.00           N  
+ATOM      2  CA  PHE A   1      -4.012   0.549   0.155  1.00  0.00           C  
+ATOM      3  C   PHE A   1      -2.693   1.261   0.012  1.00  0.00           C  
+ATOM      4  O   PHE A   1      -2.676   2.448  -0.413  1.00  0.00           O  
+ATOM      5  CB  PHE A   1      -4.295   0.192   1.627  1.00  0.00           C  
+ATOM      6  CG  PHE A   1      -4.417   1.425   2.488  1.00  0.00           C  
+ATOM      7  CD1 PHE A   1      -3.327   1.869   3.256  1.00  0.00           C  
+ATOM      8  CD2 PHE A   1      -5.608   2.170   2.490  1.00  0.00           C  
+ATOM      9  CE1 PHE A   1      -3.433   3.032   4.024  1.00  0.00           C  
+ATOM     10  CE2 PHE A   1      -5.711   3.333   3.260  1.00  0.00           C  
+ATOM     11  CZ  PHE A   1      -4.624   3.763   4.027  1.00  0.00           C  
+ATOM     12  N   TRP A   2      -1.468   0.602   0.370  1.00  0.00           N  
+ATOM     13  CA  TRP A   2      -0.187   1.308   0.439  1.00  0.00           C  
+ATOM     14  C   TRP A   2       0.593   1.074  -0.828  1.00  0.00           C  
+ATOM     15  O   TRP A   2       0.978   2.065  -1.507  1.00  0.00           O  
+ATOM     16  CB  TRP A   2       0.606   0.839   1.672  1.00  0.00           C  
+ATOM     17  CG  TRP A   2       1.739   1.775   1.979  1.00  0.00           C  
+ATOM     18  CD1 TRP A   2       2.989   1.793   1.369  1.00  0.00           C  
+ATOM     19  CD2 TRP A   2       1.724   2.864   2.828  1.00  0.00           C  
+ATOM     20  NE1 TRP A   2       3.729   2.825   1.834  1.00  0.00           N  
+ATOM     21  CE2 TRP A   2       2.949   3.471   2.719  1.00  0.00           C  
+ATOM     22  CE3 TRP A   2       0.724   3.372   3.659  1.00  0.00           C  
+ATOM     23  CZ2 TRP A   2       3.263   4.622   3.440  1.00  0.00           C  
+ATOM     24  CZ3 TRP A   2       1.014   4.531   4.401  1.00  0.00           C  
+ATOM     25  CH2 TRP A   2       2.278   5.153   4.293  1.00  0.00           C  
+ATOM     26  N   TYR A   3       0.927  -0.260  -1.243  1.00  0.00           N  
+ATOM     27  CA  TYR A   3       1.881  -0.536  -2.321  1.00  0.00           C  
+ATOM     28  C   TYR A   3       1.131  -0.638  -3.631  1.00  0.00           C  
+ATOM     29  O   TYR A   3       0.836   0.430  -4.233  1.00  0.00           O  
+ATOM     30  CB  TYR A   3       2.713  -1.789  -1.989  1.00  0.00           C  
+ATOM     31  CG  TYR A   3       3.556  -1.584  -0.756  1.00  0.00           C  
+ATOM     32  CD1 TYR A   3       4.804  -0.946  -0.851  1.00  0.00           C  
+ATOM     33  CD2 TYR A   3       3.087  -1.992   0.504  1.00  0.00           C  
+ATOM     34  CE1 TYR A   3       5.575  -0.730   0.295  1.00  0.00           C  
+ATOM     35  CE2 TYR A   3       3.857  -1.770   1.649  1.00  0.00           C  
+ATOM     36  CZ  TYR A   3       5.101  -1.139   1.549  1.00  0.00           C  
+ATOM     37  OH  TYR A   3       5.855  -0.919   2.700  1.00  0.00           O  
+ATOM     38  N   PRO A   4       0.650  -1.890  -4.153  1.00  0.00           N  
+ATOM     39  CA  PRO A   4      -0.704  -2.025  -4.682  1.00  0.00           C  
+ATOM     40  C   PRO A   4      -1.738  -2.041  -3.588  1.00  0.00           C  
+ATOM     41  O   PRO A   4      -1.403  -2.300  -2.399  1.00  0.00           O  
+ATOM     42  CB  PRO A   4      -0.710  -3.333  -5.470  1.00  0.00           C  
+ATOM     43  CG  PRO A   4       0.749  -3.588  -5.818  1.00  0.00           C  
+ATOM     44  CD  PRO A   4       1.551  -2.875  -4.739  1.00  0.00           C  
+ATOM     45  N   GLY A   5      -3.117  -1.828  -3.918  1.00  0.00           N  
+ATOM     46  CA  GLY A   5      -4.178  -1.855  -2.916  1.00  0.00           C  
+ATOM     47  C   GLY A   5      -4.152  -0.599  -2.101  1.00  0.00           C  
+ATOM     48  O   GLY A   5      -4.272   0.514  -2.681  1.00  0.00           O  
+CONECT    1    2   47
+CONECT    2    3    5
+CONECT    3    4    4   12
+CONECT    5    6
+CONECT    6    7    7    8
+CONECT    7    9
+CONECT    8   10   10
+CONECT    9   11   11
+CONECT   10   11
+CONECT   12   13
+CONECT   13   14   16
+CONECT   14   15   15   26
+CONECT   16   17
+CONECT   17   18   18   19
+CONECT   18   20
+CONECT   19   21   22   22
+CONECT   20   21
+CONECT   21   23   23
+CONECT   22   24
+CONECT   23   25
+CONECT   24   25   25
+CONECT   26   27
+CONECT   27   28   30
+CONECT   28   29   29   38
+CONECT   30   31
+CONECT   31   32   33   33
+CONECT   32   34   34
+CONECT   33   35
+CONECT   34   36
+CONECT   35   36   36
+CONECT   36   37
+CONECT   38   39   44
+CONECT   39   40   42
+CONECT   40   41   41   45
+CONECT   42   43
+CONECT   43   44
+CONECT   45   46
+CONECT   46   47
+CONECT   47   48   48
+END

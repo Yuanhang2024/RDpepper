@@ -1,0 +1,107 @@
+{
+  "artifacts": {
+    "sdist": {
+      "path": "D:\\ChimeraModel_Lite\\experiments\\cycpep_master_benchmark\\paper_pipeline_vnext\\candidate025_rdpepper_jcim\\release_build\\dist_003\\rdpepper-5.1.0.tar.gz",
+      "sha256": "f8124b7ba0accbabc39b7b77a631c4d364a99d8ab8646d59f0862aaaf4140bee",
+      "size": 10374981
+    },
+    "wheel": {
+      "path": "D:\\ChimeraModel_Lite\\experiments\\cycpep_master_benchmark\\paper_pipeline_vnext\\candidate025_rdpepper_jcim\\release_build\\dist_003\\rdpepper-5.1.0-py3-none-any.whl",
+      "sha256": "1904b4701d258692ab99e201a042a0a256cc32c99b81a7995e657026b41f0d34",
+      "size": 11027623
+    }
+  },
+  "clean_install": {
+    "capabilities_smoke": "PASS",
+    "cycpep_master_file": "D:\\ChimeraModel_Lite\\experiments\\cycpep_master_benchmark\\paper_pipeline_vnext\\candidate025_rdpepper_jcim\\release_build\\venv_003_clean\\Lib\\site-packages\\cycpep_master\\__init__.py",
+    "dependencies": {
+      "gemmi": "0.7.5",
+      "numpy": "2.5.2",
+      "pandas": "3.0.5",
+      "rdkit": "2026.3.3"
+    },
+    "distribution_version": "5.1.0",
+    "entry_points": [
+      "cycpep",
+      "cycpep-gui",
+      "cycpep-overlay",
+      "cycpep-v5-reproduce",
+      "rdpepper",
+      "rdpepper-gui",
+      "rdpepper-overlay",
+      "rdpepper-reproduce"
+    ],
+    "package_data": {
+      "MIGRATION_RDPEPPER.md": true,
+      "RDPEPPER_RELEASE_NOTES.md": true,
+      "THIRD_PARTY_DATA.md": true,
+      "data/templates/templates_index.json": true,
+      "data/torsion_priors/torsion_priors_runtime.json": true,
+      "schemas/exact_v1.schema.json": true,
+      "unified_monomer_library.csv": true
+    },
+    "pip_check": "PASS_NO_BROKEN_REQUIREMENTS",
+    "public_object_identity": true,
+    "python": "3.14.5",
+    "rdpepper_file": "D:\\ChimeraModel_Lite\\experiments\\cycpep_master_benchmark\\paper_pipeline_vnext\\candidate025_rdpepper_jcim\\release_build\\venv_003_clean\\Lib\\site-packages\\rdpepper\\__init__.py"
+  },
+  "compatibility": {
+    "historical_schema_ids_renamed": false,
+    "implementation_import": "cycpep_master",
+    "new_cli": [
+      "rdpepper",
+      "rdpepper-gui"
+    ],
+    "new_import": "rdpepper",
+    "preserved_cli": [
+      "cycpep",
+      "cycpep-gui",
+      "cycpep-overlay",
+      "cycpep-v5-reproduce"
+    ]
+  },
+  "nnaa_data_source": {
+    "associated_content": "Molecular formula strings for the diverse 10,000 amino acid library (TXT)",
+    "citation": "Amarasinghe et al., Virtual Screening Expands the Non-Natural Amino Acid Palette for Peptide Optimization, J. Chem. Inf. Model. 2022, 62, 2999-3007.",
+    "compiled_row_count": 9998,
+    "doi": "10.1021/acs.jcim.2c00193",
+    "publication_subset_count": 10000,
+    "redistribution_license": "NOT_CONFIRMED",
+    "release_effect": "Public GitHub/PyPI upload remains blocked until terms or permission are confirmed, or the derived rows are removed through a separately tested successor release."
+  },
+  "packaging_status": "PASS",
+  "publication_status": "HOLD_DATA_LICENSE",
+  "remaining_submission_metadata": [
+    "authors",
+    "affiliations",
+    "corresponding author",
+    "CRediT",
+    "funding",
+    "conflict of interest",
+    "AI disclosure",
+    "controlled GitHub owner",
+    "repository/archive DOI"
+  ],
+  "schema_version": "1.0.0-rdpepper-qa.1",
+  "scientific_source_parity": {
+    "changed": [],
+    "identical_count": 65,
+    "missing_from_freeze": [],
+    "note": "Branding, documentation, release-builder, and facade files are outside this scientific execution scope.",
+    "scope_file_count": 65,
+    "status": "PASS"
+  },
+  "software": "RDpepper",
+  "targeted_tests": {
+    "errors": 0,
+    "failures": 0,
+    "junit_path": "D:\\ChimeraModel_Lite\\experiments\\cycpep_master_benchmark\\paper_pipeline_vnext\\candidate025_rdpepper_jcim\\release_build\\qa\\targeted_brand_packaging.junit.xml",
+    "passed": 58,
+    "skipped": 0,
+    "tests": 58,
+    "time_seconds": 92.408
+  },
+  "test_scope_note": "The 1,291-pass predecessor production receipt remains historical. The full suite was not repeated solely for public naming and packaging changes; targeted tests and scientific-source parity cover the current change surface.",
+  "upload_authorized": false,
+  "version": "5.1.0"
+}
