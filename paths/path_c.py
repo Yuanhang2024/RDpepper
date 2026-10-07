@@ -160,12 +160,11 @@ def _generate(pdb_path, chain_id='L'):
         selected = _choose_template(rname, het_name)
         selected_templates.append(selected)
         smi = selected.smiles
-        off = add_to_combo(combo, smi)
-        offs.append(off)
-
         tmol = Chem.MolFromSmiles(smi)
         Chem.SanitizeMol(tmol)
         ni, _, _, ci, _ = parse_backbone(tmol)
+        off = add_to_combo(combo, smi, mol=tmol)
+        offs.append(off)
         n_idxs.append(ni)
         c_idxs.append(ci)
 

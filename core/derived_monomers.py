@@ -3,18 +3,19 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import io
 import json
 import math
 import os
 import re
 import shutil
 import tempfile
+import threading
 from functools import lru_cache
 from pathlib import Path
 from typing import Iterable
 
 from rdkit import Chem
-from rdkit.Chem import Descriptors
 
 from .cxsmiles_gen import gen_cxsmiles
 
@@ -24,7 +25,7 @@ _UNIFIED_CSV = _PACKAGE_DIR / "unified_monomer_library.csv"
 _DERIVED_CSV = _PACKAGE_DIR / "derived_monomer_library.csv"
 _MANIFEST_JSON = _PACKAGE_DIR / "derived_monomer_manifest.json"
 _QUARANTINE_CSV = _PACKAGE_DIR / "derived_monomer_quarantine.csv"
-_DESCRIPTOR_MAP = dict(Descriptors._descList)
+_DESCRIPTOR_MAP: dict | None = None
 _QUARANTINE_FIELDS = (
     "record_id", "pdb_resname", "status", "reason_codes", "input_sha256",
     "candidate_graph_count", "details_json",
@@ -71,13 +72,24 @@ def _graph_metadata(smiles: str) -> dict[str, str]:
     }
 
 
+def _descriptor_map() -> dict:
+    # Descriptors pulls the full rdMolDescriptors extension (~0.5 s import);
+    # only quarantine-detail computation ever needs it, so it loads on first
+    # use instead of at module import.
+    global _DESCRIPTOR_MAP
+    if _DESCRIPTOR_MAP is None:
+        from rdkit.Chem import Descriptors
+        _DESCRIPTOR_MAP = dict(Descriptors._descList)
+    return _DESCRIPTOR_MAP
+
+
 def _descriptor_values(smiles: str, fields: Iterable[str]) -> dict[str, float]:
     molecule = Chem.MolFromSmiles(smiles)
     if molecule is None:
         raise ValueError("descriptor input is not parseable")
     values = {}
     for field in fields:
-        function = _DESCRIPTOR_MAP.get(field)
+        function = _descriptor_map().get(field)
         if function is None:
             raise ValueError(f"RDKit descriptor {field!r} is unavailable")
         try:
@@ -275,9 +287,20 @@ def next_derived_id() -> int:
         if not path.is_file():
             continue
         with path.open("r", encoding="utf-8-sig", newline="") as handle:
-            for row in csv.DictReader(handle):
+            reader = csv.reader(handle)
+            try:
+                header = next(reader)
+            except StopIteration:
+                continue
+            try:
+                id_column = header.index("monomer_id")
+            except ValueError:
+                continue
+            for row in reader:
+                if len(row) <= id_column:
+                    continue
                 try:
-                    maximum = max(maximum, int(str(row.get("monomer_id", "")).strip()))
+                    maximum = max(maximum, int(str(row[id_column]).strip()))
                 except ValueError:
                     continue
     return maximum + 1
@@ -330,22 +353,121 @@ def _unified_port_identity(row: dict) -> str | None:
     return _ported_graph_identity(cxsmiles, str(row.get("R3", "-")))
 
 
+# ── Durable unified-identity cache ──────────────────────────────────────────
+#
+# ``_unified_identities`` recomputes an InChIKey->(symbol, R3 port identity)
+# map over every Unified CSV row (~10k SMILES parses + InChIKeys + ported
+# CXSMILES).  It is a pure function of the raw CSV bytes, so the map is
+# persisted to a small JSON file keyed by a SHA-256 over those bytes: any
+# library edit rewrites the file and forces a recompute.  Performance-only;
+# RDPEPPER_DISABLE_IDENTITY_CACHE=1 or an unreadable location falls back to
+# the original on-the-fly computation.  The in-process ``lru_cache(1)``
+# staleness semantics are unchanged.
+
+_UNIFIED_IDENTITY_CACHE_LOCK = threading.RLock()
+
+
+def _unified_identity_cache_path() -> str:
+    base = os.environ.get("RDPEPPER_IDENTITY_CACHE")
+    if base:
+        directory, _ = os.path.split(os.path.abspath(base))
+        return os.path.join(directory, "unified_identities_cache.json")
+    root = (
+        os.environ.get("LOCALAPPDATA")
+        or os.environ.get("TEMP")
+        or os.environ.get("TMP")
+        or os.getcwd()
+    )
+    return os.path.join(root, "rdpepper", "unified_identities_cache.json")
+
+
+def _load_unified_identity_entry(fingerprint: str):
+    if os.environ.get("RDPEPPER_DISABLE_IDENTITY_CACHE", "") == "1":
+        return None
+    try:
+        with open(_unified_identity_cache_path(), "r", encoding="utf-8") as fh:
+            payload = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    if payload.get("schema") != 1 or payload.get("fingerprint") != fingerprint:
+        return None
+    entries = payload.get("entries")
+    if not isinstance(entries, list):
+        return None
+    return entries
+
+
+def _store_unified_identity_entry(fingerprint: str, identities) -> None:
+    if os.environ.get("RDPEPPER_DISABLE_IDENTITY_CACHE", "") == "1":
+        return
+    entries = [
+        [inchikey, symbol, port]
+        for inchikey, (symbol, port) in identities.items()
+    ]
+    path = _unified_identity_cache_path()
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(
+                {"schema": 1, "fingerprint": fingerprint, "entries": entries},
+                fh,
+            )
+        os.replace(tmp, path)
+    except OSError:
+        pass  # performance-only cache; unwritable location is fine
+
+
+def _compute_unified_identities(raw: bytes) -> dict[str, tuple[str, str | None]]:
+    identities = {}
+    text = raw.decode("utf-8-sig")
+    for row in csv.DictReader(io.StringIO(text, newline="")):
+        smiles = str(row.get("smiles_canonical", "")).strip()
+        molecule = Chem.MolFromSmiles(smiles) if smiles else None
+        if molecule is None:
+            continue
+        key = Chem.MolToInchiKey(molecule)
+        symbol = str(row.get("symbol", "")).strip()
+        if key and symbol:
+            identities.setdefault(
+                key, (symbol, _unified_port_identity(row))
+            )
+    return identities
+
+
 @lru_cache(maxsize=1)
 def _unified_identities() -> dict[str, tuple[str, str | None]]:
-    identities = {}
-    with _UNIFIED_CSV.open("r", encoding="utf-8-sig", newline="") as handle:
-        for row in csv.DictReader(handle):
-            smiles = str(row.get("smiles_canonical", "")).strip()
-            molecule = Chem.MolFromSmiles(smiles) if smiles else None
-            if molecule is None:
-                continue
-            key = Chem.MolToInchiKey(molecule)
-            symbol = str(row.get("symbol", "")).strip()
-            if key and symbol:
-                identities.setdefault(
-                    key, (symbol, _unified_port_identity(row))
-                )
-    return identities
+    with _UNIFIED_IDENTITY_CACHE_LOCK:
+        try:
+            raw = _UNIFIED_CSV.read_bytes()
+        except OSError:
+            raw = None
+        if raw is not None:
+            fingerprint = hashlib.sha256(raw).hexdigest()
+            cached = _load_unified_identity_entry(fingerprint)
+            if cached is not None:
+                identities = {}
+                for inchikey, symbol, port in cached:
+                    identities.setdefault(inchikey, (symbol, port))
+                return identities
+        if raw is None:
+            identities = {}
+            with _UNIFIED_CSV.open("r", encoding="utf-8-sig", newline="") as handle:
+                for row in csv.DictReader(handle):
+                    smiles = str(row.get("smiles_canonical", "")).strip()
+                    molecule = Chem.MolFromSmiles(smiles) if smiles else None
+                    if molecule is None:
+                        continue
+                    key = Chem.MolToInchiKey(molecule)
+                    symbol = str(row.get("symbol", "")).strip()
+                    if key and symbol:
+                        identities.setdefault(
+                            key, (symbol, _unified_port_identity(row))
+                        )
+            return identities
+        identities = _compute_unified_identities(raw)
+        _store_unified_identity_entry(fingerprint, identities)
+        return identities
 
 
 def _alias(candidate: dict, target_symbol: str, metadata: dict) -> dict:

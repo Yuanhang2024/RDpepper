@@ -9,6 +9,9 @@ stereochemistry collapse to one neutral free-monomer graph.
 
 from __future__ import annotations
 
+import copy
+import os
+import threading
 from dataclasses import dataclass, field
 from itertools import product
 import hashlib
@@ -522,45 +525,153 @@ def _stereo_ambiguity(molecule: Chem.Mol) -> tuple[list[int], list[int]]:
     return tetrahedral, unspecified_bonds
 
 
+class _ResidueEvidence:
+    """Lazily computed, decision-free preamble evidence for one residue.
+
+    ``_library_first_residue_match`` and ``infer_residue_monomer`` evaluate
+    the same file-level preamble (input hash, heavy atoms, backbone-gate
+    inputs, residue position, explicit R3 port, explicit intra-residue
+    edges, connectivity candidates). The bundle caches those raw values
+    only; every gate decision, its ordering, and its reason codes stay in
+    the consuming function, so sharing one bundle between the two consumers
+    (and across the bootstrap fallback) changes no observable behavior.
+    Values are treated as read-only by all consumers.
+    """
+
+    __slots__ = (
+        "path", "chain_id", "residue_key", "pdb_resname",
+        "_atoms", "_input_sha256", "_named", "_residues", "_positions",
+        "_r3", "_explicit", "_connectivity",
+    )
+
+    def __init__(
+        self, pdb_path: str | Path, chain_id: str, residue_key: tuple
+    ) -> None:
+        self.path = Path(pdb_path)
+        self.chain_id = chain_id
+        self.residue_key = tuple(residue_key)
+        self.pdb_resname = str(residue_key[0]).strip().upper()
+        self._atoms = None
+        self._input_sha256 = None
+        self._named = None
+        self._residues = None
+        self._positions = None
+        self._r3 = None
+        self._explicit = None
+        self._connectivity = None
+
+    @property
+    def input_sha256(self) -> str:
+        if self._input_sha256 is None:
+            self._input_sha256 = hashlib.sha256(
+                self.path.read_bytes()
+            ).hexdigest()
+        return self._input_sha256
+
+    @property
+    def atoms(self) -> list[dict]:
+        if self._atoms is None:
+            self._atoms = get_pdb_atoms(
+                str(self.path), self.residue_key, self.chain_id
+            )
+        return self._atoms
+
+    @property
+    def named(self) -> tuple[dict[str, dict], list[str]]:
+        if self._named is None:
+            self._named = _unique_named_atoms(self.atoms)
+        return self._named
+
+    @property
+    def residues(self) -> list[dict]:
+        if self._residues is None:
+            self._residues = get_res_seq(
+                str(self.path), self.chain_id, include_het=True
+            )
+        return self._residues
+
+    @property
+    def positions(self) -> list[int]:
+        if self._positions is None:
+            key = self.residue_key
+            self._positions = [
+                index + 1 for index, residue in enumerate(self.residues)
+                if tuple(residue["key"]) == key
+            ]
+        return self._positions
+
+    @property
+    def r3_port(self) -> tuple[dict[str, Any] | None, str | None, list[str]]:
+        if self._r3 is None:
+            self._r3 = _explicit_r3_port(
+                self.path, self.chain_id, self.residues,
+                self.positions[0], self.atoms,
+            )
+        return self._r3
+
+    @property
+    def explicit_edges(self) -> set[tuple[int, int]]:
+        if self._explicit is None:
+            self._explicit = _explicit_intra_residue_edges(
+                self.path, {int(atom["num"]) for atom in self.atoms}
+            )
+        return self._explicit
+
+    @property
+    def connectivity(
+        self,
+    ) -> tuple[list[set[tuple[int, int]]], dict[str, Any], list[str]]:
+        if self._connectivity is None:
+            self._connectivity = _connectivity_candidates(
+                self.atoms, self.explicit_edges
+            )
+        return self._connectivity
+
+
+def _residue_evidence(
+    pdb_path: str | Path, chain_id: str, residue_key: tuple
+) -> _ResidueEvidence:
+    """Build the shared per-residue preamble bundle (raw values only)."""
+    return _ResidueEvidence(pdb_path, chain_id, residue_key)
+
+
 def infer_residue_monomer(
     pdb_path: str | Path,
     chain_id: str,
     residue_key: tuple,
+    *,
+    _bundle: _ResidueEvidence | None = None,
 ) -> LocalMonomerInferenceResult:
     """Infer one residue as a neutral free monomer or quarantine it."""
-    path = Path(pdb_path)
-    pdb_resname = str(residue_key[0]).strip().upper()
-    input_hash = hashlib.sha256(path.read_bytes()).hexdigest()
-    atoms = get_pdb_atoms(str(path), residue_key, chain_id)
+    bundle = (
+        _bundle
+        if _bundle is not None
+        else _residue_evidence(pdb_path, chain_id, residue_key)
+    )
+    atoms = bundle.atoms
+    pdb_resname = bundle.pdb_resname
     evidence: dict[str, Any] = {
         "inference_version": "local-monomer-inference-1",
         "resolution_mode": "locally_inferred",
-        "input_sha256": input_hash,
+        "input_sha256": bundle.input_sha256,
         "chain_id": chain_id,
         "residue_key": list(residue_key),
         "observed_heavy_atom_count": len(atoms),
         "observed_serials": [atom["num"] for atom in atoms],
     }
-    named, reasons = _unique_named_atoms(atoms)
+    named, reasons = bundle.named
     if reasons:
         return LocalMonomerInferenceResult(
             "quarantined", pdb_resname, residue_key,
             reason_codes=reasons, evidence=evidence,
         )
-    residues = get_res_seq(str(path), chain_id, include_het=True)
-    positions = [
-        index + 1 for index, residue in enumerate(residues)
-        if tuple(residue["key"]) == tuple(residue_key)
-    ]
+    positions = bundle.positions
     if len(positions) != 1:
         return LocalMonomerInferenceResult(
             "quarantined", pdb_resname, residue_key,
             reason_codes=["RESIDUE_POSITION_NOT_UNIQUE"], evidence=evidence,
         )
-    position = positions[0]
-    r3_port, r3_failure_status, r3_reasons = _explicit_r3_port(
-        path, chain_id, residues, position, atoms
-    )
+    r3_port, r3_failure_status, r3_reasons = bundle.r3_port
     evidence["ports"] = {
         "R1": {"pdb_serial": named["N"]["num"], "atom_name": "N", "default": "H"},
         "R2": {"pdb_serial": named["C"]["num"], "atom_name": "C", "default": "OH"},
@@ -572,12 +683,7 @@ def infer_residue_monomer(
             reason_codes=r3_reasons,
             evidence=evidence,
         )
-    explicit = _explicit_intra_residue_edges(
-        path, {atom["num"] for atom in atoms}
-    )
-    connectivity, connectivity_evidence, reasons = _connectivity_candidates(
-        atoms, explicit
-    )
+    connectivity, connectivity_evidence, reasons = bundle.connectivity
     evidence["connectivity"] = connectivity_evidence
     if reasons:
         return LocalMonomerInferenceResult(
@@ -683,6 +789,7 @@ def _library_first_residue_match(
     residue_key: tuple,
     *,
     source_identity_template: Any | None = None,
+    _bundle: _ResidueEvidence | None = None,
 ) -> tuple[LocalMonomerInferenceResult | None, dict[str, Any]]:
     """Resolve an unknown PDB code from base Unified evidence before inference."""
     from ..paths.residue_template_factory import (
@@ -690,12 +797,16 @@ def _library_first_residue_match(
         mapped_free_smiles_for_r3,
     )
 
-    path = Path(pdb_path)
-    pdb_resname = str(residue_key[0]).strip().upper()
-    atoms = get_pdb_atoms(str(path), residue_key, chain_id)
+    bundle = (
+        _bundle
+        if _bundle is not None
+        else _residue_evidence(pdb_path, chain_id, residue_key)
+    )
+    atoms = bundle.atoms
+    pdb_resname = bundle.pdb_resname
     attempt: dict[str, Any] = {
         "resolution_mode": "unified_library_match",
-        "input_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        "input_sha256": bundle.input_sha256,
         "chain_id": chain_id,
         "residue_key": list(residue_key),
         "observed_heavy_atom_count": len(atoms),
@@ -709,29 +820,21 @@ def _library_first_residue_match(
                 source_identity_template.mol.GetNumAtoms()
             ),
         }
-    named, reasons = _unique_named_atoms(atoms)
+    named, reasons = bundle.named
     if reasons:
         attempt["fallback_reason_codes"] = reasons
         return None, attempt
-    residues = get_res_seq(str(path), chain_id, include_het=True)
-    positions = [
-        index + 1 for index, residue in enumerate(residues)
-        if tuple(residue["key"]) == tuple(residue_key)
-    ]
+    positions = bundle.positions
     if len(positions) != 1:
         attempt["fallback_reason_codes"] = ["RESIDUE_POSITION_NOT_UNIQUE"]
         return None, attempt
-    r3_port, _r3_status, r3_reasons = _explicit_r3_port(
-        path, chain_id, residues, positions[0], atoms
-    )
+    r3_port, _r3_status, r3_reasons = bundle.r3_port
     if r3_reasons:
         attempt["fallback_reason_codes"] = list(r3_reasons)
         return None, attempt
-    explicit = _explicit_intra_residue_edges(
-        path, {int(atom["num"]) for atom in atoms}
-    )
+    explicit = bundle.explicit_edges
     connectivity, connectivity_evidence, connectivity_reasons = (
-        _connectivity_candidates(atoms, explicit)
+        bundle.connectivity
     )
     attempt["connectivity"] = connectivity_evidence
     if connectivity_reasons:
@@ -932,6 +1035,32 @@ def _embedded_component_residue_match(
         candidate_graph_count=1,
         evidence=evidence,
     )
+
+
+def _source_identity_cross_check(
+    result: LocalMonomerInferenceResult,
+    source_constraint: dict[str, Any],
+    source_template: Any | None,
+) -> None:
+    """Bind one component-based resolution to its source-identity declaration.
+
+    Shared by the input-embedded component path and the opt-in standalone
+    CCD component path: the constraint evidence is attached unchanged, and a
+    unique resolution whose free graph disagrees with the declared source
+    template's InChIKey is rejected with the same reason code.
+    """
+    result.evidence["source_identity_constraint"] = source_constraint
+    if result.unique and source_template is not None:
+        resolution = result.evidence.get("embedded_chem_comp_resolution", {})
+        candidate = Chem.MolFromSmiles(str(resolution.get("free_smiles", "")))
+        declared = Chem.MolFromSmiles(str(source_template.free_smiles))
+        if (
+            candidate is None
+            or declared is None
+            or Chem.MolToInchiKey(candidate) != Chem.MolToInchiKey(declared)
+        ):
+            result.status = "rejected"
+            result.reason_codes = ["SOURCE_IDENTITY_CONSTRAINT_CONFLICT"]
 
 
 def _source_identity_row_for_residue(
@@ -1205,7 +1334,277 @@ def audit_known_monomers_against_embedded_components(
     }
 
 
+# ── Opt-in standalone-CCD resolution for unknown residue codes ─────────────
+#
+# Environment convention mirrors paths/_map_utils.py RDPEPPER_IDENTITY_CACHE:
+#   RDPEPPER_AUTO_CCD=1            enable (default: disabled; zero change)
+#   RDPEPPER_CCD_CACHE_DIR         override <LOCALAPPDATA>/rdpepper/ccd
+#                                  (TEMP/TMP fallback)
+#   RDPEPPER_CCD_ALLOW_NETWORK=1   permit files.rcsb.org downloads
+#                                  (default: offline, cache-only)
+#
+# A disabled feature, an offline cache miss, a failed fetch or an unparsable
+# component CIF is a silent fallback to the existing bootstrap ladder; no
+# negative lookup is ever persisted to disk.  Resolution itself reuses the
+# authoritative-component path (_embedded_component_residue_match) unchanged,
+# so no similarity guessing is introduced: the observed residue must match
+# the component graph exactly.
+
+_AUTO_CCD_COMPONENT_MEMO: dict[tuple, dict] = {}
+_AUTO_CCD_MEMO_LOCK = threading.Lock()
+
+
+def _auto_ccd_settings() -> tuple[bool, Path | None, bool]:
+    """Resolve the env-gated standalone-CCD configuration (never cached)."""
+    if os.environ.get("RDPEPPER_AUTO_CCD", "") != "1":
+        return False, None, False
+    raw_directory = os.environ.get("RDPEPPER_CCD_CACHE_DIR")
+    if raw_directory:
+        cache_directory: Path | None = Path(raw_directory)
+    else:
+        base = (
+            os.environ.get("LOCALAPPDATA")
+            or os.environ.get("TEMP")
+            or os.environ.get("TMP")
+            or os.getcwd()
+        )
+        cache_directory = Path(base) / "rdpepper" / "ccd"
+    allow_network = os.environ.get("RDPEPPER_CCD_ALLOW_NETWORK", "") == "1"
+    return True, cache_directory, allow_network
+
+
+def _auto_ccd_load_component(
+    component_id: str,
+    *,
+    cache_directory: Path,
+    allow_network: bool,
+) -> tuple[dict | None, dict[str, Any]]:
+    """Load one standalone CCD component, or fall back silently.
+
+    Reuses core/monomer_resolution._load_requested_components verbatim (same
+    cache layout, atomic cache write, download URL and timeout), so a cached
+    or downloaded component CIF is parsed by the exact mmcif_chem_comp
+    extractor the embedded path uses.  Only positive hits are memoized
+    in-process, keyed by cache-file identity; misses always re-check disk.
+    """
+    from .monomer_resolution import _load_requested_components
+
+    normalized = str(component_id).strip().upper()
+    cache_file = cache_directory / f"{normalized}.cif"
+
+    def _memo_key() -> tuple | None:
+        try:
+            stat = cache_file.stat()
+        except OSError:
+            return None
+        return (
+            os.path.normcase(str(cache_file)),
+            stat.st_mtime_ns,
+            stat.st_size,
+        )
+
+    try:
+        existed_before = cache_file.is_file()
+    except OSError:
+        existed_before = False
+    if existed_before:
+        key = _memo_key()
+        if key is not None:
+            with _AUTO_CCD_MEMO_LOCK:
+                memoized = _AUTO_CCD_COMPONENT_MEMO.get(key)
+            if memoized is not None:
+                return memoized, {
+                    "component_id": normalized,
+                    "cache_file": str(cache_file),
+                    "network_fetch": False,
+                }
+    try:
+        templates, _errors = _load_requested_components(
+            {normalized: normalized},
+            ccd_files=(),
+            ccd_directory=None,
+            allow_network=allow_network,
+            network_timeout_seconds=30.0,
+            cache_directory=cache_directory,
+        )
+        component = templates.get(normalized)
+    except Exception:
+        # Invalid component IDs, unreadable caches and parser failures are
+        # silent fallbacks to the existing ladder; never raise.
+        return None, {
+            "component_id": normalized,
+            "cache_directory": str(cache_directory),
+            "allow_network": allow_network,
+            "lookup": "failed",
+        }
+    if component is not None:
+        key = _memo_key()
+        if key is not None:
+            with _AUTO_CCD_MEMO_LOCK:
+                _AUTO_CCD_COMPONENT_MEMO[key] = component
+        try:
+            downloaded_to_cache = cache_file.is_file()
+        except OSError:
+            downloaded_to_cache = False
+        return component, {
+            "component_id": normalized,
+            "cache_file": str(cache_file) if downloaded_to_cache else None,
+            "network_fetch": bool(
+                allow_network
+                and not existed_before
+                and downloaded_to_cache
+            ),
+        }
+    return None, {
+        "component_id": normalized,
+        "cache_directory": str(cache_directory),
+        "allow_network": allow_network,
+        "lookup": "unavailable",
+    }
+
+
+# ── Bounded in-process memo for bootstrap_unknown_monomers ────────────────
+#
+# One reconstruction request re-runs the same file-level bootstrap: the V6
+# remediation pass, route retries, and the MOL2 export replay call it with
+# identical (file, chain, embedded templates, source identity audit) inputs.
+# The bootstrap is a pure function of those inputs plus registry state; every
+# registry-state mutation site routes through _invalidate_exact_v1_registry_cache
+# and therefore bumps registry_epoch(), which is embedded in the key so entries
+# can never outlive the registry state that produced them. Hits return a
+# deepcopy because callers may attach evidence to result objects; exceptions
+# are never cached and keep propagating from the uncached call.
+_BOOTSTRAP_MEMO: dict[tuple, PDBMonomerBootstrapResult] = {}
+_BOOTSTRAP_MEMO_ORDER: list[tuple] = []
+_BOOTSTRAP_MEMO_MAX = 8
+_BOOTSTRAP_MEMO_LOCK = threading.RLock()
+
+
+def _bootstrap_templates_fingerprint(templates: Any) -> tuple | None:
+    """Content fingerprint of an embedded chem-comp template mapping."""
+    if templates is None:
+        return None
+    return tuple(
+        (
+            str(resname),
+            str((templates[resname] or {}).get("component_snapshot_sha256")),
+            str((templates[resname] or {}).get("source_input_sha256")),
+            len((templates[resname] or {}).get("atom_rows") or ()),
+            len((templates[resname] or {}).get("bond_rows") or ()),
+        )
+        for resname in sorted(templates)
+    )
+
+
+def _bootstrap_memo_key(
+    pdb_path: str | Path,
+    chain_id: str,
+    embedded_chem_comp_templates: dict[str, dict] | None,
+    source_identity_audit: dict[str, Any] | None,
+) -> tuple | None:
+    """Build the memo key, or None to bypass the memo for this call."""
+    from ..paths._map_utils import registry_epoch
+
+    try:
+        stat = os.stat(pdb_path)
+    except OSError:
+        return None
+    if source_identity_audit is None:
+        audit_key = None
+    else:
+        try:
+            audit_key = hashlib.sha256(
+                json.dumps(
+                    source_identity_audit,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    default=str,
+                ).encode("utf-8")
+            ).hexdigest()
+        except (TypeError, ValueError):
+            return None
+    # The opt-in standalone-CCD path also reads the environment and the CCD
+    # cache directory, so its configuration (and, cheaply, the cache
+    # directory identity) is bound into the key.  Disabled -> None, keeping
+    # the feature-off key space separate and zero-change.
+    auto_ccd_key = None
+    enabled, cache_directory, allow_network = _auto_ccd_settings()
+    if enabled and cache_directory is not None:
+        try:
+            cache_stat = os.stat(cache_directory)
+            cache_signature: tuple | None = (
+                cache_stat.st_mtime_ns, cache_stat.st_size
+            )
+        except OSError:
+            cache_signature = None
+        auto_ccd_key = (
+            os.path.normcase(str(cache_directory)),
+            bool(allow_network),
+            cache_signature,
+        )
+    return (
+        os.path.normcase(os.path.abspath(str(pdb_path))),
+        str(chain_id),
+        stat.st_mtime_ns,
+        stat.st_size,
+        registry_epoch(),
+        _bootstrap_templates_fingerprint(embedded_chem_comp_templates),
+        audit_key,
+        auto_ccd_key,
+    )
+
+
 def bootstrap_unknown_monomers(
+    pdb_path: str | Path,
+    chain_id: str,
+    *,
+    embedded_chem_comp_templates: dict[str, dict] | None = None,
+    source_identity_audit: dict[str, Any] | None = None,
+) -> PDBMonomerBootstrapResult:
+    """Infer every Unified-unknown residue without persisting entity state.
+
+    Memoized front for _bootstrap_unknown_monomers_impl (same semantics).
+    The key binds file identity (normcase abspath + mtime_ns + size), chain,
+    registry epoch, and content fingerprints of the embedded chem-comp
+    templates and the source identity audit.  When the opt-in standalone-CCD
+    path is enabled (RDPEPPER_AUTO_CCD=1), its configuration and cache
+    directory identity are bound as well; disabled mode contributes None and
+    the feature changes nothing.  A missing/unreadable file or a
+    non-serializable audit bypasses the memo entirely; hits return a
+    deepcopy so callers can never mutate the cached result.
+    """
+    key = _bootstrap_memo_key(
+        pdb_path,
+        chain_id,
+        embedded_chem_comp_templates,
+        source_identity_audit,
+    )
+    if key is not None:
+        with _BOOTSTRAP_MEMO_LOCK:
+            cached = _BOOTSTRAP_MEMO.get(key)
+        if cached is not None:
+            return copy.deepcopy(cached)
+    result = _bootstrap_unknown_monomers_impl(
+        pdb_path,
+        chain_id,
+        embedded_chem_comp_templates=embedded_chem_comp_templates,
+        source_identity_audit=source_identity_audit,
+    )
+    if key is not None:
+        # Cache a private snapshot: callers may attach evidence to the
+        # returned result object, and the miss path must stay just as
+        # isolated as the hit path.
+        snapshot = copy.deepcopy(result)
+        with _BOOTSTRAP_MEMO_LOCK:
+            if key not in _BOOTSTRAP_MEMO:
+                _BOOTSTRAP_MEMO[key] = snapshot
+                _BOOTSTRAP_MEMO_ORDER.append(key)
+                while len(_BOOTSTRAP_MEMO_ORDER) > _BOOTSTRAP_MEMO_MAX:
+                    _BOOTSTRAP_MEMO.pop(_BOOTSTRAP_MEMO_ORDER.pop(0), None)
+    return result
+
+
+def _bootstrap_unknown_monomers_impl(
     pdb_path: str | Path,
     chain_id: str,
     *,
@@ -1226,18 +1625,21 @@ def bootstrap_unknown_monomers(
     if not unknown:
         return PDBMonomerBootstrapResult(status="no_unknown_monomers")
 
+    auto_enabled, auto_cache_directory, auto_allow_network = (
+        _auto_ccd_settings()
+    )
     results = []
     for residue in unknown:
         key = tuple(residue["key"])
-        atoms = get_pdb_atoms(str(pdb_path), key, chain_id)
+        resname = str(residue["name"]).strip().upper()
+        bundle = _residue_evidence(pdb_path, chain_id, key)
+        atoms = bundle.atoms
         source_constraint, source_template = _source_identity_constraint(
             source_identity_audit,
             key,
             len(atoms),
         )
-        component = (embedded_chem_comp_templates or {}).get(
-            str(residue["name"]).strip().upper()
-        )
+        component = (embedded_chem_comp_templates or {}).get(resname)
         if source_constraint.get("status") == "incomplete":
             source_reason = str(
                 source_constraint.get("reason_code")
@@ -1250,9 +1652,7 @@ def bootstrap_unknown_monomers(
                 reason_codes=[source_reason],
                 evidence={
                     "resolution_mode": "source_identity_constraint",
-                    "input_sha256": hashlib.sha256(
-                        Path(pdb_path).read_bytes()
-                    ).hexdigest(),
+                    "input_sha256": bundle.input_sha256,
                     "chain_id": chain_id,
                     "residue_key": list(key),
                     "observed_heavy_atom_count": len(atoms),
@@ -1269,9 +1669,7 @@ def bootstrap_unknown_monomers(
                 reason_codes=["SOURCE_IDENTITY_CONSTRAINT_INCOMPLETE"],
                 evidence={
                     "resolution_mode": "source_identity_constraint",
-                    "input_sha256": hashlib.sha256(
-                        Path(pdb_path).read_bytes()
-                    ).hexdigest(),
+                    "input_sha256": bundle.input_sha256,
                     "chain_id": chain_id,
                     "residue_key": list(key),
                     "observed_heavy_atom_count": len(atoms),
@@ -1284,22 +1682,53 @@ def bootstrap_unknown_monomers(
             result = _embedded_component_residue_match(
                 pdb_path, chain_id, key, component
             )
-            result.evidence["source_identity_constraint"] = source_constraint
-            if result.unique and source_template is not None:
-                resolution = result.evidence.get(
-                    "embedded_chem_comp_resolution", {}
-                )
-                candidate = Chem.MolFromSmiles(str(resolution.get("free_smiles", "")))
-                declared = Chem.MolFromSmiles(str(source_template.free_smiles))
-                if (
-                    candidate is None
-                    or declared is None
-                    or Chem.MolToInchiKey(candidate) != Chem.MolToInchiKey(declared)
-                ):
-                    result.status = "rejected"
-                    result.reason_codes = ["SOURCE_IDENTITY_CONSTRAINT_CONFLICT"]
+            _source_identity_cross_check(
+                result, source_constraint, source_template
+            )
             results.append(result)
             continue
+        ccd_attempt_evidence = None
+        if auto_enabled and auto_cache_directory is not None:
+            # Opt-in standalone-CCD lookup for codes the input did not embed.
+            # A cache/offline miss is silent; a found component resolves via
+            # the same authoritative matcher and gates as the embedded path.
+            # A non-unique resolution falls back to the existing ladder with
+            # the failed attempt recorded for audit.
+            ccd_component, ccd_provenance = _auto_ccd_load_component(
+                resname,
+                cache_directory=auto_cache_directory,
+                allow_network=auto_allow_network,
+            )
+            if ccd_component is None:
+                ccd_attempt_evidence = dict(ccd_provenance)
+            else:
+                ccd_result = _embedded_component_residue_match(
+                    pdb_path, chain_id, key, ccd_component
+                )
+                # Same resolver, gates and source-identity cross-checks as
+                # the input-embedded path; the evidence distinguishes the
+                # authoritative-but-not-source-bound provenance using
+                # monomer_resolution's existing vocabulary.
+                ccd_result.evidence["resolution_mode"] = (
+                    "standalone_ccd_component"
+                )
+                ccd_result.evidence["standalone_ccd_provenance"] = (
+                    ccd_provenance
+                )
+                _source_identity_cross_check(
+                    ccd_result, source_constraint, source_template
+                )
+                if ccd_result.unique:
+                    results.append(ccd_result)
+                    continue
+                ccd_attempt_evidence = {
+                    "lookup": "resolution_failed",
+                    "status": ccd_result.status,
+                    "reason_codes": list(ccd_result.reason_codes),
+                    "component_snapshot_sha256": (
+                        ccd_result.evidence.get("component_snapshot_sha256")
+                    ),
+                }
         result, match_attempt = _library_first_residue_match(
             pdb_path,
             chain_id,
@@ -1309,19 +1738,18 @@ def bootstrap_unknown_monomers(
                 if source_constraint.get("status") == "constrained"
                 else None
             ),
+            _bundle=bundle,
         )
         if result is None:
             if source_template is not None and source_constraint.get("status") == "constrained":
                 result = LocalMonomerInferenceResult(
                     "rejected",
-                    str(residue["name"]).strip().upper(),
+                    resname,
                     key,
                     reason_codes=["SOURCE_IDENTITY_CONSTRAINT_INCOMPLETE"],
                     evidence={
                         "resolution_mode": "source_identity_constraint",
-                        "input_sha256": hashlib.sha256(
-                            Path(pdb_path).read_bytes()
-                        ).hexdigest(),
+                        "input_sha256": bundle.input_sha256,
                         "chain_id": chain_id,
                         "residue_key": list(key),
                         "observed_heavy_atom_count": len(atoms),
@@ -1329,10 +1757,18 @@ def bootstrap_unknown_monomers(
                         "library_first_match": match_attempt,
                     },
                 )
+                if ccd_attempt_evidence is not None:
+                    result.evidence["standalone_ccd_attempt"] = (
+                        ccd_attempt_evidence
+                    )
                 results.append(result)
                 continue
-            result = infer_residue_monomer(pdb_path, chain_id, key)
+            result = infer_residue_monomer(
+                pdb_path, chain_id, key, _bundle=bundle
+            )
             result.evidence["library_first_match"] = match_attempt
+        if ccd_attempt_evidence is not None:
+            result.evidence["standalone_ccd_attempt"] = ccd_attempt_evidence
         result.evidence["source_identity_constraint"] = source_constraint
         if (
             result.unique

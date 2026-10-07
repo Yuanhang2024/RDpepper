@@ -30,12 +30,9 @@ from cycpep_master.docking.receptor_pdbqt import (
 )
 
 DEMO_RECEPTORS = {
-    case: (
-        Path(__file__).resolve().parents[2]
-        / ".zcode_v710_application_demo"
-        / "current_source_run_002"
-        / case
-        / "receptor.pdb"
+    case: Path(
+        r"D:\ChimeraModel_Lite\.zcode_v710_application_demo"
+        rf"\current_source_run_002\{case}\receptor.pdb"
     )
     for case in ("1bm2", "1bck")
 }

@@ -20,7 +20,6 @@ import re
 import sys
 import tempfile
 from typing import Any, Iterable, Mapping, Sequence
-from urllib.request import Request, urlopen
 
 
 EPHEMERAL_MONOMER_ID_START = 2_000_000_000
@@ -349,6 +348,10 @@ def _download_component(
     *,
     timeout_seconds: float,
 ) -> bytes:
+    # Deferred: the urllib/email/http chain (~0.15 s) is only needed for
+    # opt-in network CCD downloads, never for offline resolution.
+    from urllib.request import Request, urlopen
+
     request = Request(
         CCD_DOWNLOAD_URL.format(component_id=component_id),
         headers={"User-Agent": "CycPep-Master/monomer-resolution"},

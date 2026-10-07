@@ -1,5 +1,6 @@
 """PDB residue sequence parser and structure analysis."""
 from functools import lru_cache
+import os
 import threading
 from typing import Optional, Dict, List
 from rdkit import Chem
@@ -145,7 +146,22 @@ def parse_backbone(mol):
     )
 
 
-def get_res_seq(pdb, chain_id='L', include_het=True):
+_RES_SEQ_CACHE: dict = {}
+_RES_SEQ_ORDER: list = []
+_RES_SEQ_CACHE_MAX = 32
+_RES_SEQ_CACHE_LOCK = threading.RLock()
+
+
+def _copy_res_seq(residues: list) -> list:
+    # Fresh residue dicts and fresh 'record_types' lists so callers may
+    # mutate their result without touching the cached copy.
+    return [
+        {**row, 'record_types': list(row['record_types'])}
+        for row in residues
+    ]
+
+
+def _parse_res_seq(pdb, chain_id='L', include_het=True):
     """Extract ordered residue sequence from a PDB file.
 
     include_het=True (default) keeps all residues, including non-standard
@@ -205,16 +221,56 @@ def get_res_seq(pdb, chain_id='L', include_het=True):
     return res
 
 
+def get_res_seq(pdb, chain_id='L', include_het=True):
+    """Ordered residue sequence, memoized per file identity.
+
+    Routes and cyclization detection re-parse the same unchanged PDB many
+    times per request; results are cached on (absolute path, chain_id,
+    include_het, mtime_ns, size), so a rewritten file never serves stale
+    residues and different chain/flag combinations never collide.  Only
+    successful parses of an existing file are cached: a missing/unreadable
+    file fails os.stat, bypasses the cache, and keeps its historical
+    FileNotFoundError/OSError behavior (an empty result for an existing file
+    is deterministic for that file identity, so it is cached like any other).
+    Returns a deep copy of the residue dicts; callers may mutate freely.
+    """
+    try:
+        stat = os.stat(pdb)
+        key = (
+            os.path.normcase(os.path.abspath(str(pdb))),
+            chain_id,
+            include_het,
+            stat.st_mtime_ns,
+            stat.st_size,
+        )
+    except OSError:
+        return _parse_res_seq(pdb, chain_id, include_het)
+    with _RES_SEQ_CACHE_LOCK:
+        cached = _RES_SEQ_CACHE.get(key)
+        if cached is not None:
+            _RES_SEQ_ORDER.remove(key)
+            _RES_SEQ_ORDER.append(key)
+            return _copy_res_seq(cached)
+    residues = _parse_res_seq(pdb, chain_id, include_het)
+    with _RES_SEQ_CACHE_LOCK:
+        cached = _RES_SEQ_CACHE.get(key)
+        if cached is None:
+            _RES_SEQ_CACHE[key] = _copy_res_seq(residues)
+            _RES_SEQ_ORDER.append(key)
+            while len(_RES_SEQ_ORDER) > _RES_SEQ_CACHE_MAX:
+                stale = _RES_SEQ_ORDER.pop(0)
+                _RES_SEQ_CACHE.pop(stale, None)
+            cached = _RES_SEQ_CACHE[key]
+        else:
+            _RES_SEQ_ORDER.remove(key)
+            _RES_SEQ_ORDER.append(key)
+        return _copy_res_seq(cached)
+
+
 _RESIDUE_ATOM_INDEX_CACHE: dict = {}
 _RESIDUE_ATOM_INDEX_ORDER: list = []
 _RESIDUE_ATOM_INDEX_MAX = 16
 _RESIDUE_ATOM_INDEX_LOCK = threading.RLock()
-
-
-def _clear_residue_atom_index_cache() -> None:
-    with _RESIDUE_ATOM_INDEX_LOCK:
-        _RESIDUE_ATOM_INDEX_CACHE.clear()
-        _RESIDUE_ATOM_INDEX_ORDER.clear()
 
 
 def _residue_atom_index(pdb, chain_id):

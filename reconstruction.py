@@ -1874,14 +1874,6 @@ def _explicit_chain_components(
     return list(grouped.values()), evidence
 
 
-def _ssbond_chain_components(
-    path_text: str, chain_ids: list[str]
-) -> list[list[str]]:
-    """Backward-compatible view of explicit chain components."""
-    groups, _evidence = _explicit_chain_components(path_text, chain_ids)
-    return groups
-
-
 def _profile_from_multichain(
     path_text: str, chain_ids: list[str]
 ) -> dict[str, Any] | None:

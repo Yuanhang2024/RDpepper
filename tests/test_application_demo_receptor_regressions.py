@@ -28,11 +28,7 @@ from cycpep_master.docking.receptor_pdbqt import (
     pdb_to_receptor_pdbqt,
 )
 
-DEMO_CASES = (
-    Path(__file__).resolve().parents[2]
-    / ".zcode_v710_application_demo"
-    / "cases"
-)
+DEMO_CASES = Path(r"D:\ChimeraModel_Lite\.zcode_v710_application_demo\cases")
 DEMO_RECEPTORS = {
     case: DEMO_CASES / case / "receptor.pdb"
     for case in ("1bck", "1bm2", "1bzh")

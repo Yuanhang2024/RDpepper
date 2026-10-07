@@ -64,3 +64,11 @@ benchmarks/bird/results/*.json
 output/
 prepared/
 .venv-*/
+
+# Executable example run outputs
+case_studies/outputs/
+case_studies/.cache/
+case_studies/latest_results.json
+
+# Local historical source backups
+*.bak_*

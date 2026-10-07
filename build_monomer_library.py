@@ -557,18 +557,6 @@ def _inchi_descriptor(smiles: str) -> str:
     return " ".join(name_parts)
 
 
-def generate_iupac_name(smiles: str) -> str:
-    """Generate IUPAC name: PubChem → InChI descriptor fallback."""
-    can, _ = canonicalize(smiles)
-    if not can:
-        return ""
-
-    name = _pubchem_iupac(can)
-    if name:
-        return name
-    return _inchi_descriptor(smiles)
-
-
 def generate_iupac_names(records: List[dict], cache: dict) -> Tuple[int, int, int]:
     """Fill iupac_name for records that need it. Returns (filled, pubchem, fallback)."""
     filled = 0

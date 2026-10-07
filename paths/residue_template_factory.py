@@ -4,7 +4,12 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass, replace
 from functools import lru_cache
+from heapq import merge
 import hashlib
+import json
+import os
+import threading
+from pathlib import Path
 from typing import Iterable
 
 from rdkit import Chem
@@ -47,6 +52,12 @@ for _alias_code, _alias_target in _map_utils._active_pdb_aliases.items():
         )
 
 
+@lru_cache(maxsize=8192)
+def _parsed_template_mol(smiles: str):
+    """Cache the RDKit parse of a template SMILES string (None if unparseable)."""
+    return Chem.MolFromSmiles(smiles)
+
+
 @dataclass(frozen=True)
 class ResidueTemplate:
     pdb_resname: str
@@ -63,10 +74,10 @@ class ResidueTemplate:
 
     @property
     def mol(self) -> Chem.Mol:
-        molecule = Chem.MolFromSmiles(self.smiles)
+        molecule = _parsed_template_mol(self.smiles)
         if molecule is None:
             raise ValueError(f"Unified template {self.symbol!r} is not parseable")
-        return molecule
+        return Chem.Mol(molecule)
 
 
 @dataclass(frozen=True)
@@ -118,6 +129,7 @@ def _normalize_port_labels(editable: Chem.RWMol, symbol: str) -> None:
         atom.ClearProp("atomLabel")
 
 
+@lru_cache(maxsize=8192)
 def _materialize_free_monomer_smiles(
     cxsmiles: str,
     r1: str,
@@ -165,6 +177,31 @@ def _materialize_free_monomer_smiles(
     )
 
 
+_CASEFOLD_SYMBOL_INDEX: dict | None = None
+
+
+def _casefold_symbol_index() -> dict[str, list[str]]:
+    """Casefolded symbol lookup over the active registry, rebuilt per epoch.
+
+    Mirrors the merged {**_unified_by_symbol, **_active_user_rows} key view
+    resolve_symbol used to scan per call (unique keys, casefold-filtered);
+    registry mutations bump the epoch and force a rebuild.
+    """
+    global _CASEFOLD_SYMBOL_INDEX
+    epoch = _map_utils.registry_epoch()
+    index = _CASEFOLD_SYMBOL_INDEX
+    if index is not None and index["epoch"] == epoch:
+        return index["folded"]
+    folded: dict[str, list[str]] = {}
+    for key in {
+        **_map_utils._unified_by_symbol,
+        **_map_utils._active_user_rows,
+    }:
+        folded.setdefault(str(key).casefold(), []).append(str(key))
+    _CASEFOLD_SYMBOL_INDEX = {"epoch": epoch, "folded": folded}
+    return folded
+
+
 def resolve_symbol(pdb_resname: str) -> str:
     name = str(pdb_resname).strip()
     mapped = _PDB_TO_UNIFIED_SYMBOL.get(name.upper())
@@ -177,21 +214,14 @@ def resolve_symbol(pdb_resname: str) -> str:
         return name
     if name in _map_utils._unified_by_symbol:
         return name
-    folded = [
-        key for key in {
-            **_map_utils._unified_by_symbol,
-            **_map_utils._active_user_rows,
-        }
-        if str(key).casefold() == name.casefold()
-    ]
+    folded = _casefold_symbol_index().get(name.casefold(), [])
     if len(folded) == 1:
         return str(folded[0])
     raise ValueError(f"No Unified symbol mapping for PDB residue {name}")
 
 
-@lru_cache(maxsize=4096)
+@lru_cache(maxsize=16384)
 def _template_from_values(
-    pdb_resname: str,
     symbol: str,
     cxsmiles: str,
     source: str,
@@ -301,8 +331,13 @@ def _template_from_values(
     free_graph_sha256 = hashlib.sha256(
         free_canonical.encode("utf-8")
     ).hexdigest()
+    # The cache key deliberately excludes the caller's PDB residue name: the
+    # materialized graph is a pure function of the Unified row, and keying on
+    # the resname would force one re-materialization per distinct unknown
+    # residue code. The cached template carries a neutral pdb_resname (the
+    # symbol); callers that need their own name get a replaced copy below.
     return ResidueTemplate(
-        pdb_resname, symbol, smiles, cxsmiles, source, r1, r2, r3,
+        symbol, symbol, smiles, cxsmiles, source, r1, r2, r3,
         free_canonical, free_graph_sha256, r3_anchor_index,
     )
 
@@ -325,9 +360,12 @@ def _template_from_row(
     ).strip()
     if not free_smiles:
         free_smiles = _materialize_free_monomer_smiles(cxsmiles, r1, r2, r3)
-    return _template_from_values(
-        str(pdb_resname), symbol, cxsmiles, source, r1, r2, r3, free_smiles
+    template = _template_from_values(
+        symbol, cxsmiles, source, r1, r2, r3, free_smiles
     )
+    if template.pdb_resname != str(pdb_resname):
+        return replace(template, pdb_resname=str(pdb_resname))
+    return template
 
 
 def get_residue_template_for_symbol(
@@ -1090,6 +1128,259 @@ def _bond_order_geometry_evidence(
     }
 
 
+_UNIFIED_CANDIDATE_INDEX_LOCK = threading.Lock()
+_unified_candidate_index: dict | None = None
+
+# ── Durable element-signature index ──────────────────────────────────────────
+#
+# Bucket placement in _ensure_unified_candidate_families needs each row's
+# element signature, which historically required materializing the template
+# (~2-8 s of RDKit parsing per fresh process for the queried families).  The
+# signature is a pure function of the row's CXSMILES, so signatures are
+# persisted per Unified-CSV fingerprint and each persisted entry additionally
+# binds the CXSMILES it was computed from: a registry overlay that rewrites a
+# row simply misses and recomputes live, so stale signatures cannot be served.
+# Performance-only; RDPEPPER_DISABLE_IDENTITY_CACHE=1 or an unreadable
+# location falls back to live computation. Rows whose template fails to
+# materialize persist a "!" marker, preserving materialization_failed audit
+# semantics across processes.
+
+_SIGNATURE_FAILED = "!"
+
+
+def _signature_index_path() -> str:
+    base = os.environ.get("RDPEPPER_IDENTITY_CACHE")
+    if base:
+        directory, _ = os.path.split(os.path.abspath(base))
+        return os.path.join(directory, "unified_signature_index.json")
+    root = (
+        os.environ.get("LOCALAPPDATA")
+        or os.environ.get("TEMP")
+        or os.environ.get("TMP")
+        or os.getcwd()
+    )
+    return os.path.join(root, "rdpepper", "unified_signature_index.json")
+
+
+def _signature_index_disabled() -> bool:
+    return os.environ.get("RDPEPPER_DISABLE_IDENTITY_CACHE", "") == "1"
+
+
+def _load_signature_index(fingerprint: str) -> dict[str, dict] | None:
+    if _signature_index_disabled():
+        return None
+    try:
+        with open(_signature_index_path(), "r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except (OSError, ValueError):
+        return None
+    if (
+        payload.get("schema") != 1
+        or payload.get("fingerprint") != fingerprint
+        or not isinstance(payload.get("entries"), dict)
+    ):
+        return None
+    return payload["entries"]
+
+
+def _merge_persisted_signatures(
+    fingerprint: str, pending: dict[str, dict]
+) -> None:
+    """Merge newly computed signature entries into the persisted index.
+
+    Last-writer-wins on concurrent processes is acceptable: a lost entry is
+    simply recomputed by the process that misses it (performance-only cache).
+    """
+    if _signature_index_disabled() or not pending:
+        return
+    path = _signature_index_path()
+    try:
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+        except (OSError, ValueError):
+            payload = None
+        entries = (
+            payload.get("entries")
+            if isinstance(payload, dict)
+            and payload.get("schema") == 1
+            and payload.get("fingerprint") == fingerprint
+            and isinstance(payload.get("entries"), dict)
+            else {}
+        )
+        entries.update(pending)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as handle:
+            json.dump(
+                {"schema": 1, "fingerprint": fingerprint, "entries": entries},
+                handle,
+            )
+        os.replace(tmp, path)
+    except OSError:
+        pass  # performance-only cache; unwritable location is fine
+
+
+def _signature_entry_for_row(
+    symbol: str, row: dict, reference: dict | None
+) -> dict:
+    """Compute one row's durable signature entry (signature or failure)."""
+    cxsmiles = str(
+        row.get("CXSMILES") or (reference or {}).get("CXSMILES", "")
+    )
+    try:
+        template = _template_from_row(symbol, symbol, row)
+        signature = [
+            [element, int(count)]
+            for element, count in _element_signature(template.mol)
+        ]
+        return {"cxsmiles": cxsmiles, "signature": signature}
+    except (ValueError, RuntimeError):
+        return {"cxsmiles": cxsmiles, "signature": _SIGNATURE_FAILED}
+
+
+def _element_signature_from_entry(
+    entry: dict | None,
+) -> tuple[tuple[str, int], ...] | None:
+    """Rebuild a hashable signature from a persisted entry, or None."""
+    if not isinstance(entry, dict):
+        return None
+    signature = entry.get("signature")
+    if signature == _SIGNATURE_FAILED:
+        return None
+    if not isinstance(signature, list):
+        return None
+    return tuple((str(element), int(count)) for element, count in signature)
+
+
+def _unified_candidate_index_for_epoch() -> dict:
+    """Return the per-epoch candidate index for find_unified_residue_matches.
+
+    The cheap layer groups every Unified row passing the static source /
+    Monomer_Type / Polymer_Type / R1-R2 presence filters by estimated polymer
+    heavy-atom count (``None`` when the CSV carries no usable count). Rows are
+    materialized at most ONCE per registry epoch (lazily, one estimated-count
+    family at a time -- see _ensure_unified_candidate_families) instead of
+    once per unknown residue, and bucketed as
+    ``(estimated_heavy_count_or_None, element_signature) -> [(symbol, row)]``.
+    Rows that fail materialization are recorded with their estimated count so
+    per-query audit counters can still be derived. All registry mutations bump
+    ``_map_utils.registry_epoch()``, which invalidates this index.
+    """
+    global _unified_candidate_index
+    epoch = _map_utils.registry_epoch()
+    index = _unified_candidate_index
+    if index is not None and index["epoch"] == epoch:
+        return index
+    with _UNIFIED_CANDIDATE_INDEX_LOCK:
+        index = _unified_candidate_index
+        epoch = _map_utils.registry_epoch()
+        if index is not None and index["epoch"] == epoch:
+            return index
+        static_rows_by_count: dict[int | None, list[tuple[str, dict]]] = {}
+        for symbol, row in sorted(_map_utils._unified_by_symbol.items()):
+            reference = _map_utils._full_unified_reference_rows().get(symbol)
+            source = str(
+                row.get("source") or (reference or {}).get("source", "")
+            ).strip()
+            if source in {"local_structure_derived", "user_registered"}:
+                continue
+            monomer_type = str(
+                row.get("Monomer_Type")
+                or (reference or {}).get("Monomer_Type", "")
+            ).strip().upper()
+            if monomer_type and monomer_type != "BACKBONE":
+                continue
+            polymer_type = str(
+                row.get("Polymer_Type")
+                or (reference or {}).get("Polymer_Type", "")
+            ).strip().upper()
+            if polymer_type and polymer_type != "PEPTIDE":
+                continue
+            cxsmiles = str(
+                row.get("CXSMILES") or (reference or {}).get("CXSMILES", "")
+            )
+            if "_R1" not in cxsmiles or "_R2" not in cxsmiles:
+                continue
+            estimated = _row_polymer_heavy_atom_count(reference or row)
+            static_rows_by_count.setdefault(estimated, []).append(
+                (str(symbol), row)
+            )
+        signature_entries: dict[str, dict] | None = None
+        signature_fingerprint: str | None = None
+        try:
+            raw_csv = Path(_map_utils._UNIFIED_CSV).read_bytes()
+        except OSError:
+            raw_csv = None
+        if raw_csv is not None:
+            signature_fingerprint = hashlib.sha256(raw_csv).hexdigest()
+            signature_entries = _load_signature_index(signature_fingerprint)
+        if signature_entries is None:
+            # Unpersistable CSV state: live-only computation, nothing stale.
+            signature_entries = {}
+        index = {
+            "epoch": epoch,
+            "static_rows_by_count": static_rows_by_count,
+            "buckets": {},
+            "materialization_failed": {},
+            "families_processed": set(),
+            "signature_entries": signature_entries,
+            "signature_fingerprint": signature_fingerprint,
+        }
+        _unified_candidate_index = index
+        return index
+
+
+def _ensure_unified_candidate_families(index: dict, count: int) -> None:
+    """Materialize the element-signature buckets needed by one query count.
+
+    Family ``count`` and the not-count-filterable ``None`` family are each
+    materialized at most once per registry epoch; bucket lists stay
+    symbol-sorted because families are filled in one pass over the
+    symbol-sorted static rows.
+    """
+    if (
+        count in index["families_processed"]
+        and None in index["families_processed"]
+    ):
+        return
+    with _UNIFIED_CANDIDATE_INDEX_LOCK:
+        pending: dict[str, dict] = {}
+        for family in (count, None):
+            if family in index["families_processed"]:
+                continue
+            for symbol, row in index["static_rows_by_count"].get(family, ()):
+                merged_cxsmiles = str(
+                    row.get("CXSMILES")
+                    or (_map_utils._full_unified_reference_rows().get(symbol) or {}).get("CXSMILES", "")
+                )
+                signature = None
+                entry = (index.get("signature_entries") or {}).get(symbol)
+                if isinstance(entry, dict) and entry.get("cxsmiles") == merged_cxsmiles:
+                    signature = _element_signature_from_entry(entry)
+                else:
+                    # No durable entry for this row (not yet computed, overlay
+                    # rewrite, or disabled cache): compute live so bucket
+                    # placement never uses a stale signature, and queue the
+                    # fresh entry for incremental persistence.
+                    reference = _map_utils._full_unified_reference_rows().get(symbol)
+                    entry = _signature_entry_for_row(symbol, row, reference)
+                    index.setdefault("signature_entries", {})[symbol] = entry
+                    pending[symbol] = entry
+                    signature = _element_signature_from_entry(entry)
+                if signature is None:
+                    index["materialization_failed"][symbol] = family
+                    continue
+                index["buckets"].setdefault((family, signature), []).append(
+                    (symbol, row)
+                )
+            index["families_processed"].add(family)
+        if pending and index.get("signature_fingerprint") is not None:
+            _merge_persisted_signatures(
+                index["signature_fingerprint"], pending
+            )
+
+
 def find_unified_residue_matches(
     pdb_resname: str,
     pdb_atoms: Iterable[dict],
@@ -1118,37 +1409,65 @@ def find_unified_residue_matches(
     matches = []
     prefiltered = 0
     rejected = Counter()
-    for symbol, row in sorted(_map_utils._unified_by_symbol.items()):
+    index = _unified_candidate_index_for_epoch()
+    _ensure_unified_candidate_families(index, len(atoms))
+    if index["epoch"] != _map_utils.registry_epoch():
+        # The registry mutated while the families were being filled; redo the
+        # lookup against the post-mutation index so candidates always come
+        # from the registry state this call is running under.
+        index = _unified_candidate_index_for_epoch()
+        _ensure_unified_candidate_families(index, len(atoms))
+    # Candidate rows are the exact estimated-count bucket plus the
+    # None-count bucket (rows without a usable HeavyAtomCount are not
+    # count-filterable). Both bucket lists are symbol-sorted, built by one
+    # pass over sorted(_unified_by_symbol.items()), and each symbol lives in
+    # at most one bucket, so heapq.merge keyed on the symbol reproduces the
+    # legacy full-scan iteration order exactly (ties cannot occur because
+    # symbols are unique, so merge stability is never exercised).
+    candidates = merge(
+        index["buckets"].get((len(atoms), target_elements), ()),
+        index["buckets"].get((None, target_elements), ()),
+        key=lambda candidate: candidate[0],
+    )
+    # Audit derivation (numeric semantics of process-description counters
+    # change by design under the candidate index): rows dropped by the
+    # static source/type/polymer/R1R2 filters, the estimated-count
+    # mismatch, or the element-signature mismatch never received a
+    # per-reason rejection in the legacy scan either (silent ``continue``),
+    # so the audit keeps every key while the index excludes those rows up
+    # front. ``source_identity_symbol_filtered`` still counts every row
+    # whose symbol mismatches the constraint (the legacy scan applied it
+    # before all other filters), and ``template_materialization`` is
+    # derived from index-build statistics: materialization failures whose
+    # estimated heavy count is None or equals len(atoms) are exactly the
+    # rows the legacy scan would have attempted to materialize here.
+    if source_identity_symbol is not None:
+        constraint_mismatches = sum(
+            1
+            for symbol in _map_utils._unified_by_symbol
+            if str(symbol) != str(source_identity_symbol)
+        )
+        if constraint_mismatches:
+            rejected["source_identity_symbol_filtered"] += constraint_mismatches
+        failed = index["materialization_failed"]
+        constrained_symbol = str(source_identity_symbol)
+        if constrained_symbol in failed and (
+            failed[constrained_symbol] is None
+            or failed[constrained_symbol] == len(atoms)
+        ):
+            rejected["template_materialization"] += 1
+    else:
+        materialization_failures = sum(
+            1
+            for estimated in index["materialization_failed"].values()
+            if estimated is None or estimated == len(atoms)
+        )
+        if materialization_failures:
+            rejected["template_materialization"] += materialization_failures
+    for symbol, row in candidates:
         if source_identity_symbol is not None and str(symbol) != str(
             source_identity_symbol
         ):
-            rejected["source_identity_symbol_filtered"] += 1
-            continue
-        reference = _map_utils._full_unified_reference_rows().get(symbol)
-        source = str(
-            row.get("source") or (reference or {}).get("source", "")
-        ).strip()
-        if source in {"local_structure_derived", "user_registered"}:
-            continue
-        monomer_type = str(
-            row.get("Monomer_Type")
-            or (reference or {}).get("Monomer_Type", "")
-        ).strip().upper()
-        if monomer_type and monomer_type != "BACKBONE":
-            continue
-        polymer_type = str(
-            row.get("Polymer_Type")
-            or (reference or {}).get("Polymer_Type", "")
-        ).strip().upper()
-        if polymer_type and polymer_type != "PEPTIDE":
-            continue
-        cxsmiles = str(
-            row.get("CXSMILES") or (reference or {}).get("CXSMILES", "")
-        )
-        if "_R1" not in cxsmiles or "_R2" not in cxsmiles:
-            continue
-        estimated = _row_polymer_heavy_atom_count(reference or row)
-        if estimated is not None and estimated != len(atoms):
             continue
         try:
             template = _template_from_row(pdb_resname, str(symbol), row)

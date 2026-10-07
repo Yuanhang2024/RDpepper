@@ -29,12 +29,9 @@ from cycpep_master.export.conformer import (
     _verified_source_handoff_molecule,
 )
 
-SFTI_INPUT = (
-    Path(__file__).resolve().parents[2]
-    / ".zcode_v710_application_demo"
-    / "current_source_run_001"
-    / "1sfi"
-    / "peptide.pdb"
+SFTI_INPUT = Path(
+    r"D:\ChimeraModel_Lite\.zcode_v710_application_demo"
+    r"\current_source_run_001\1sfi\peptide.pdb"
 )
 
 SFTI_CANDIDATE_SMILES = (

@@ -54,7 +54,7 @@ class CyclizationInfo:
 # PDB Record Parsers
 # ══════════════════════════════════════════════════════════════════════════
 
-def read_ssbond(pdb_path: str) -> List[Dict]:
+def _parse_ssbond(pdb_path: str) -> List[Dict]:
     """Parse SSBOND records from PDB.
 
     SSBOND format:
@@ -92,7 +92,7 @@ def read_ssbond(pdb_path: str) -> List[Dict]:
     return ssbonds
 
 
-def read_link(pdb_path: str) -> List[Dict]:
+def _parse_link(pdb_path: str) -> List[Dict]:
     """Parse LINK records from PDB.
 
     LINK format:
@@ -132,6 +132,96 @@ def read_link(pdb_path: str) -> List[Dict]:
         except (ValueError, IndexError):
             continue
     return links
+
+
+_SSBOND_CACHE: Dict[tuple, List[Dict]] = {}
+_SSBOND_CACHE_ORDER: List[tuple] = []
+_SSBOND_CACHE_MAX = 32
+_SSBOND_CACHE_LOCK = threading.RLock()
+
+_LINK_CACHE: Dict[tuple, List[Dict]] = {}
+_LINK_CACHE_ORDER: List[tuple] = []
+_LINK_CACHE_MAX = 32
+_LINK_CACHE_LOCK = threading.RLock()
+
+
+def _copy_records(records: List[Dict]) -> List[Dict]:
+    # Records are flat str/int dicts, so per-record dict() copies are deep
+    # copies; callers may mutate their result without touching the cache.
+    return [dict(record) for record in records]
+
+
+def read_ssbond(pdb_path: str) -> List[Dict]:
+    """Parse SSBOND records from PDB (memoized per file identity).
+
+    Cache policy: only successful parses of an existing file are cached,
+    keyed on (absolute path, mtime_ns, size).  A missing/unreadable file
+    fails os.stat, bypasses the cache, and keeps its historical
+    FileNotFoundError/OSError behavior; a rewritten file changes identity
+    (mtime/size), so a later-appearing or modified file never serves stale
+    records.  Returns fresh record copies.
+    """
+    try:
+        stat = os.stat(pdb_path)
+        key = (os.path.normcase(os.path.abspath(str(pdb_path))),
+               stat.st_mtime_ns, stat.st_size)
+    except OSError:
+        return _parse_ssbond(pdb_path)
+    with _SSBOND_CACHE_LOCK:
+        cached = _SSBOND_CACHE.get(key)
+        if cached is not None:
+            _SSBOND_CACHE_ORDER.remove(key)
+            _SSBOND_CACHE_ORDER.append(key)
+            return _copy_records(cached)
+    ssbonds = _parse_ssbond(pdb_path)
+    with _SSBOND_CACHE_LOCK:
+        cached = _SSBOND_CACHE.get(key)
+        if cached is None:
+            _SSBOND_CACHE[key] = _copy_records(ssbonds)
+            _SSBOND_CACHE_ORDER.append(key)
+            while len(_SSBOND_CACHE_ORDER) > _SSBOND_CACHE_MAX:
+                stale = _SSBOND_CACHE_ORDER.pop(0)
+                _SSBOND_CACHE.pop(stale, None)
+            cached = _SSBOND_CACHE[key]
+        else:
+            _SSBOND_CACHE_ORDER.remove(key)
+            _SSBOND_CACHE_ORDER.append(key)
+        return _copy_records(cached)
+
+
+def read_link(pdb_path: str) -> List[Dict]:
+    """Parse LINK records from PDB (memoized per file identity).
+
+    Cache policy mirrors :func:`read_ssbond`: only successful parses of an
+    existing file are cached on (absolute path, mtime_ns, size); missing or
+    rewritten files never serve stale records.  Returns fresh record copies.
+    """
+    try:
+        stat = os.stat(pdb_path)
+        key = (os.path.normcase(os.path.abspath(str(pdb_path))),
+               stat.st_mtime_ns, stat.st_size)
+    except OSError:
+        return _parse_link(pdb_path)
+    with _LINK_CACHE_LOCK:
+        cached = _LINK_CACHE.get(key)
+        if cached is not None:
+            _LINK_CACHE_ORDER.remove(key)
+            _LINK_CACHE_ORDER.append(key)
+            return _copy_records(cached)
+    links = _parse_link(pdb_path)
+    with _LINK_CACHE_LOCK:
+        cached = _LINK_CACHE.get(key)
+        if cached is None:
+            _LINK_CACHE[key] = _copy_records(links)
+            _LINK_CACHE_ORDER.append(key)
+            while len(_LINK_CACHE_ORDER) > _LINK_CACHE_MAX:
+                stale = _LINK_CACHE_ORDER.pop(0)
+                _LINK_CACHE.pop(stale, None)
+            cached = _LINK_CACHE[key]
+        else:
+            _LINK_CACHE_ORDER.remove(key)
+            _LINK_CACHE_ORDER.append(key)
+        return _copy_records(cached)
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -322,12 +412,6 @@ _CONECT_CACHE: Dict[tuple, List[tuple]] = {}
 _CONECT_CACHE_ORDER: List[tuple] = []
 _CONECT_CACHE_MAX = 32
 _CONECT_CACHE_LOCK = threading.RLock()
-
-
-def _clear_conect_parse_cache() -> None:
-    with _CONECT_CACHE_LOCK:
-        _CONECT_CACHE.clear()
-        _CONECT_CACHE_ORDER.clear()
 
 
 def read_conect(pdb_path: str) -> List[tuple]:

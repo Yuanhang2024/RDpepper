@@ -1,0 +1,185 @@
+{
+  "software": "RDpepper 7.3.0",
+  "wheel_sha256": "4ffdc7e7b62747a1465e90e226cca7674147e6941ef2774dbd165f37ac7d37a1",
+  "validation_scope": "Target-installed published wheel with dependencies reused from the existing scientific environment. Not a clean-environment test.",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "python_version": "3.14.5 (tags/v3.14.5:5607950, May 10 2026, 10:43:50) [MSC v.1944 64 bit (AMD64)]",
+  "summary": {
+    "total": 3,
+    "passed": 3,
+    "failed": 0
+  },
+  "cases": [
+    {
+      "name": "PRD_000227",
+      "chain": "L",
+      "input_sha256": "3b37024bd0049a1f617288e2fb007e6b8ecd4f2b888692d1821c6fab6fd4a801",
+      "status": "passed",
+      "export": {
+        "operation": "export_best_available",
+        "status": "success",
+        "requested_format_status": "fulfilled",
+        "chemical_rigor": "C1:H",
+        "coordinate_level": "X3",
+        "coordinate_mode": "source_bound",
+        "mapped_heavy_atoms": 60,
+        "generated_heavy_atoms": 0,
+        "receipt_sha256": "3d8829653c14139aa73703fd4e50687d2ae010d6453ee6e6b5803c8a688fa4a8",
+        "warning_codes": [
+          "V6_STRICT_NOT_SUCCESS",
+          "V6_LOCAL_MONOMER_INFERENCE_NOT_UNIQUE",
+          "DEGRADED_UNKNOWN_RESIDUE",
+          "DEGRADED_TRUNCATED_RESIDUE",
+          "DEGRADED_CANDIDATE_PROMOTION_BLOCKED",
+          "BOND_ORDER_CANDIDATE_INFERRED",
+          "INFERRED_CHEMISTRY_UNQUALIFIED",
+          "INFERENCE_ENGINES_DISAGREE",
+          "OPENBABEL_INFERENCE_UNAVAILABLE"
+        ],
+        "result_origin": "bond_order_inference_hypothesis",
+        "unresolved_monomers": [
+          {
+            "symbol": "MHW",
+            "ledger_error": "ValueError: No Unified symbol mapping for PDB residue MHW"
+          },
+          {
+            "symbol": "MHV",
+            "ledger_error": "ValueError: No Unified symbol mapping for PDB residue MHV"
+          },
+          {
+            "symbol": "004",
+            "ledger_error": "ValueError: No Unified symbol mapping for PDB residue 004"
+          }
+        ],
+        "resolved_monomers": {
+          "DBB": "dAbu",
+          "MEA": "meA",
+          "PRO": "P",
+          "THR": "T"
+        }
+      },
+      "readback": {
+        "status": "success",
+        "reader_mode": "rdkit_charge_aware",
+        "sanitized": true,
+        "atom_count": 109,
+        "heavy_atom_count": 60,
+        "total_formal_charge": 0,
+        "full_inchikey": "FEPMHVLSLDOMQC-IYPFLVAKSA-N",
+        "receipt_verification": "verified",
+        "coordinates_verified": true
+      }
+    },
+    {
+      "name": "PRD_000331",
+      "chain": "L",
+      "input_sha256": "10981890c78b87805337c31e8d29e635836a3b98d2c811d7069dc2e46518ad66",
+      "status": "passed",
+      "export": {
+        "operation": "export_best_available",
+        "status": "success",
+        "requested_format_status": "fulfilled",
+        "chemical_rigor": "C2:H",
+        "coordinate_level": "X3",
+        "coordinate_mode": "source_bound",
+        "mapped_heavy_atoms": 42,
+        "generated_heavy_atoms": 0,
+        "receipt_sha256": "9d713dd3e297c69a8de21d3be8de1bc87b692f760808b15a40c7ab14c34874fe",
+        "warning_codes": [
+          "V6_STRICT_NOT_SUCCESS",
+          "V6_LOCAL_MONOMER_INFERENCE_NOT_UNIQUE",
+          "DEGRADED_UNKNOWN_RESIDUE",
+          "DEGRADED_TRUNCATED_RESIDUE",
+          "DEGRADED_CANDIDATE_PROMOTION_BLOCKED",
+          "BOND_ORDER_CANDIDATE_INFERRED",
+          "INFERRED_CHEMISTRY_UNQUALIFIED",
+          "INFERENCE_ENGINES_DISAGREE"
+        ],
+        "result_origin": "bond_order_inference_candidate",
+        "unresolved_monomers": [
+          {
+            "symbol": "PHQ",
+            "ledger_error": "ValueError: No Unified symbol mapping for PDB residue PHQ"
+          },
+          {
+            "symbol": "ASA",
+            "ledger_error": "ValueError: No Unified symbol mapping for PDB residue ASA"
+          }
+        ],
+        "resolved_monomers": {
+          "ASP": "D",
+          "GLU": "E",
+          "VAL": "V"
+        }
+      },
+      "readback": {
+        "status": "success",
+        "reader_mode": "rdkit_charge_aware",
+        "sanitized": true,
+        "atom_count": 78,
+        "heavy_atom_count": 42,
+        "total_formal_charge": 0,
+        "full_inchikey": "RKEUSPKRYPGTDQ-AYMMHLMVSA-N",
+        "receipt_verification": "verified",
+        "coordinates_verified": true
+      }
+    },
+    {
+      "name": "PRD_000807",
+      "chain": "L",
+      "input_sha256": "c2dc8b5cd290acbfa892abe248ac806d037608e53bd76f2021c69b33d97e7cb8",
+      "status": "passed",
+      "export": {
+        "operation": "export_best_available",
+        "status": "success",
+        "requested_format_status": "fulfilled",
+        "chemical_rigor": "C2:H",
+        "coordinate_level": "X3",
+        "coordinate_mode": "source_bound",
+        "mapped_heavy_atoms": 58,
+        "generated_heavy_atoms": 0,
+        "receipt_sha256": "6ea50d80515a2f30c976f1c5fcc089e0925e17f9fda240ffcbc004ec27030667",
+        "warning_codes": [
+          "V6_STRICT_NOT_SUCCESS",
+          "V6_LOCAL_MONOMER_INFERENCE_NOT_UNIQUE",
+          "DEGRADED_UNKNOWN_RESIDUE",
+          "DEGRADED_TRUNCATED_RESIDUE",
+          "DEGRADED_CANDIDATE_PROMOTION_BLOCKED",
+          "BOND_ORDER_CANDIDATE_INFERRED",
+          "INFERRED_CHEMISTRY_UNQUALIFIED",
+          "INFERENCE_ENGINES_DISAGREE"
+        ],
+        "result_origin": "bond_order_inference_candidate",
+        "unresolved_monomers": [
+          {
+            "symbol": "HCI",
+            "ledger_error": "ValueError: No Unified symbol mapping for PDB residue HCI"
+          },
+          {
+            "symbol": "TPO",
+            "ledger_error": "ValueError: No Unified symbol mapping for PDB residue TPO"
+          }
+        ],
+        "resolved_monomers": {
+          "ALA": "A",
+          "HIS": "H",
+          "LEU": "L",
+          "NH2": "nh2",
+          "PRO": "P",
+          "SER": "S"
+        }
+      },
+      "readback": {
+        "status": "success",
+        "reader_mode": "rdkit_charge_aware",
+        "sanitized": true,
+        "atom_count": 112,
+        "heavy_atom_count": 58,
+        "total_formal_charge": 0,
+        "full_inchikey": "ATYOYHNMUAPYOW-ZEJNGAGRSA-N",
+        "receipt_verification": "verified",
+        "coordinates_verified": true
+      }
+    }
+  ]
+}

@@ -8,14 +8,17 @@ lossy model projection.
 
 from __future__ import annotations
 
+import atexit
 from collections import Counter
 from dataclasses import dataclass
 import csv
 from functools import lru_cache
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
+import threading
 from typing import Any, Iterable, Mapping, Sequence
 
 from rdkit import Chem
@@ -94,10 +97,6 @@ class EdgeOperation:
     dst: int | None
 
 
-def _package_root() -> Path:
-    return Path(__file__).resolve().parent
-
-
 def _row_digest(row: Mapping[str, Any]) -> str:
     selected = {
         key: str(row.get(key, "")).strip()
@@ -118,16 +117,10 @@ def _row_digest(row: Mapping[str, Any]) -> str:
 
 @lru_cache(maxsize=1)
 def _full_unified_rows() -> dict[str, tuple[dict[str, str], ...]]:
-    path = _package_root() / "unified_monomer_library.csv"
-    with path.open("r", encoding="utf-8-sig", newline="") as handle:
-        grouped: dict[str, list[dict[str, str]]] = {}
-        for row in csv.DictReader(handle):
-            symbol = str(row.get("symbol", "")).strip()
-            if symbol:
-                grouped.setdefault(symbol, []).append(dict(row))
-    return {
-        symbol: tuple(rows) for symbol, rows in grouped.items()
-    }
+    # Same grouped fold as paths._map_utils, whose durable pickle cache (keyed
+    # by a SHA-256 over the CSV bytes) makes fresh processes skip the ~2 s
+    # DictReader pass; kill switch / mismatch falls back to the live fold.
+    return _map_utils._load_grouped_unified_rows_cached()
 
 
 def _port_atoms(
@@ -159,17 +152,117 @@ def _port_atoms(
     return result
 
 
+# ── Durable annotated-identity value cache ────────────────────────────────────
+#
+# _annotated_smiles_identity re-parses the same annotated library SMILES
+# strings in every fresh process (registry init + port checks). It is a pure
+# function of the value that never raises (parse failures are None), so a
+# content-addressed JSON file mirrors the paths-layer CXSMILES value cache:
+# batched pending entries, atexit/threshold flush, same env switches, and
+# None cached as a legitimate value.
+
+_ANNOTATED_IDENTITY_CACHE = None
+_ANNOTATED_IDENTITY_PENDING: dict = {}
+_ANNOTATED_IDENTITY_LOCK = threading.RLock()
+_ANNOTATED_MISSING = object()
+_ANNOTATED_FLUSH_THRESHOLD = 8192
+
+
+def _annotated_identity_cache_path() -> str:
+    base = os.environ.get("RDPEPPER_IDENTITY_CACHE")
+    if base:
+        directory, _ = os.path.split(os.path.abspath(base))
+        return os.path.join(directory, "annotated_identities_cache.json")
+    root = (
+        os.environ.get("LOCALAPPDATA")
+        or os.environ.get("TEMP")
+        or os.environ.get("TMP")
+        or os.getcwd()
+    )
+    return os.path.join(root, "rdpepper", "annotated_identities_cache.json")
+
+
+def _load_annotated_identity_cache() -> dict:
+    global _ANNOTATED_IDENTITY_CACHE
+    if _ANNOTATED_IDENTITY_CACHE is not None:
+        return _ANNOTATED_IDENTITY_CACHE
+    with _ANNOTATED_IDENTITY_LOCK:
+        if _ANNOTATED_IDENTITY_CACHE is not None:
+            return _ANNOTATED_IDENTITY_CACHE
+        entries = {}
+        if os.environ.get("RDPEPPER_DISABLE_IDENTITY_CACHE", "") != "1":
+            try:
+                with open(_annotated_identity_cache_path(), "r", encoding="utf-8") as fh:
+                    payload = json.load(fh)
+                if payload.get("schema") == 1 and isinstance(payload.get("entries"), dict):
+                    entries = payload["entries"]
+            except (OSError, ValueError):
+                entries = {}
+        _ANNOTATED_IDENTITY_CACHE = entries
+        return entries
+
+
+def _flush_annotated_identity_entries() -> None:
+    global _ANNOTATED_IDENTITY_CACHE
+    if os.environ.get("RDPEPPER_DISABLE_IDENTITY_CACHE", "") == "1":
+        return
+    with _ANNOTATED_IDENTITY_LOCK:
+        pending = dict(_ANNOTATED_IDENTITY_PENDING)
+        _ANNOTATED_IDENTITY_PENDING.clear()
+        if not pending:
+            return
+        fresh = dict(_ANNOTATED_IDENTITY_CACHE or {})
+        fresh.update(pending)
+        path = _annotated_identity_cache_path()
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            tmp = path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as fh:
+                json.dump({"schema": 1, "entries": fresh}, fh)
+            os.replace(tmp, path)
+            _ANNOTATED_IDENTITY_CACHE = fresh
+        except OSError:
+            pass  # performance-only cache; unwritable location is fine
+
+
+atexit.register(_flush_annotated_identity_entries)
+
+
+@lru_cache(maxsize=32768)
+def _annotated_smiles_identity(annotated: str) -> str | None:
+    """Parse+canonicalize one annotated SMILES string.
+
+    Pure function of the SMILES value, so it is memoized on the value rather
+    than on the monomer symbol: ``monomers2smi_dict`` is rebuilt in place on
+    registry mutations, and a symbol-keyed cache could serve a stale identity
+    for a re-registered symbol, while a fresh value always lands on a fresh
+    cache key. None/parse-failure results are cached with identical
+    semantics to an uncached call, both in-process and in the durable
+    content-addressed file.
+    """
+    cached = _load_annotated_identity_cache().get(annotated, _ANNOTATED_MISSING)
+    if cached is not _ANNOTATED_MISSING:
+        return cached
+    normalized = re.sub(r":_R([123])", r":\1", str(annotated))
+    molecule = Chem.MolFromSmiles(normalized)
+    if molecule is None:
+        value = None
+    else:
+        value = Chem.MolToSmiles(
+            molecule, canonical=True, isomericSmiles=True
+        )
+    with _ANNOTATED_IDENTITY_LOCK:
+        _ANNOTATED_IDENTITY_PENDING[annotated] = value
+        if len(_ANNOTATED_IDENTITY_PENDING) >= _ANNOTATED_FLUSH_THRESHOLD:
+            _flush_annotated_identity_entries()
+    return value
+
+
 def _ported_smiles_identity(symbol: str) -> str | None:
     annotated = _map_utils.monomers2smi_dict.get(symbol)
     if not annotated:
         return None
-    normalized = re.sub(r":_R([123])", r":\1", str(annotated))
-    molecule = Chem.MolFromSmiles(normalized)
-    if molecule is None:
-        return None
-    return Chem.MolToSmiles(
-        molecule, canonical=True, isomericSmiles=True
-    )
+    return _annotated_smiles_identity(annotated)
 
 
 def _cx_ported_identity(row: Mapping[str, Any]) -> str | None:

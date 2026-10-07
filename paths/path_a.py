@@ -749,7 +749,7 @@ def _build_combo_impl(
             n_idx = cap_map.get("N")
         anchors.append((n_idx, c_idx))
 
-        off = add_to_combo(combo, smi)
+        off = add_to_combo(combo, smi, mol=mol)
         offs.append(off)
 
     # Peptide backbone bonds

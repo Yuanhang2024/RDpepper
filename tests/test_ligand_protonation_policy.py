@@ -33,14 +33,9 @@ from cycpep_master.docking.protonation import (
 _STAGE_PACKAGE_ROOT = Path(__file__).resolve().parents[2]
 
 _EVIDENCE_PARENTS = {
-    case: (
-        _STAGE_PACKAGE_ROOT
-        / ".zcode_cocrystal_execution_002"
-        / shard
-        / f"case_{case}"
-        / "arm_A"
-        / "ligand_A_parent_normalized.mol"
-    )
+    case: Path(
+        r"D:\ChimeraModel_Lite\.zcode_cocrystal_execution_002"
+    ) / shard / f"case_{case}" / "arm_A" / "ligand_A_parent_normalized.mol"
     for case, shard in (
         ("6q1u", "run_001_shard1"),
         ("6u8g", "run_001_shard2"),

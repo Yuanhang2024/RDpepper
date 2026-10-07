@@ -61,12 +61,6 @@ def read_first_model_lines(path: str) -> tuple[str, ...]:
     return tuple(first_model_records(read_pdb_lines(path)))
 
 
-def _clear_pdb_text_cache() -> None:
-    with _PDB_TEXT_CACHE_LOCK:
-        _PDB_TEXT_CACHE.clear()
-        _PDB_TEXT_CACHE_ORDER.clear()
-
-
 def first_model_records(lines: Iterable[str]) -> Iterator[str]:
     """Yield coordinates from the first MODEL block and global records.
 

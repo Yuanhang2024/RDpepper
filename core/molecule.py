@@ -44,9 +44,14 @@ def materialize_typed_crosslink(combo, begin_idx, end_idx, bond_type):
     return True
 
 
-def add_to_combo(combo, smi):
-    """Append a SMILES molecule template to an RWMol combo, returning the offset."""
-    mol = Chem.MolFromSmiles(smi)
+def add_to_combo(combo, smi, mol=None):
+    """Append a SMILES molecule template to an RWMol combo, returning the offset.
+
+    When ``mol`` is provided it must be the ``Chem.MolFromSmiles(smi)`` result
+    for the same string; it is still sanitized and kekulized here.
+    """
+    if mol is None:
+        mol = Chem.MolFromSmiles(smi)
     Chem.SanitizeMol(mol)
     Chem.Kekulize(mol)
     offset = combo.GetNumAtoms()

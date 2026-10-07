@@ -50,8 +50,8 @@ _L_NONSTD_3TO_SYMBOL = {
 #   base symbol -> (variant symbol, CXSMILES with _R3 on CB)
 _LANTHIONINE_VARIANT = {
     # Ala-derived lanthionine: CB methyl carbon carries the thioether.
-    'A':    ('LanA', '[*]C[C@@H](N[*])C([*])=O |$_R3;;;;_R1;;_R2;$|'),
-    'dA':   ('dLanA', '[*]C[C@H](N[*])C([*])=O |$_R3;;;;_R1;;_R2;$|'),
+    'A':    ('LanA', '[*]C[C@H](N[*])C([*])=O |$_R3;;;;_R1;;_R2;$|'),
+    'dA':   ('dLanA', '[*]C[C@@H](N[*])C([*])=O |$_R3;;;;_R1;;_R2;$|'),
     # Abu-derived β-methyllanthionine: CB (bearing the extra methyl) carries it.
     'Abu':  ('bMeLan', 'CC([*])[C@H](N[*])C([*])=O |$;;_R3;;;_R1;;_R2;$|'),
     'dAbu': ('dBMeLan', 'CC([*])[C@@H](N[*])C([*])=O |$;;_R3;;;_R1;;_R2;$|'),

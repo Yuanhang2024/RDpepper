@@ -34,7 +34,7 @@ this preparation does not silently create a different benchmarked product.
 
 ## CycPeptMPDB monomers: CC BY 4.0
 
-- Li, X.; Yanagisawa, K.; Sugita, M.; Fujie, T.; Ohue, M.; Akiyama, Y.
+- Li, J.; Yanagisawa, K.; Sugita, M.; Fujie, T.; Ohue, M.; Akiyama, Y.
   *CycPeptMPDB: A Comprehensive Database of Membrane Permeability of
   Cyclic Peptides.* Journal of Chemical Information and Modeling 63,
   2240-2250 (2023). https://doi.org/10.1021/acs.jcim.2c01573

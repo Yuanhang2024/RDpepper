@@ -12,7 +12,6 @@ from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
 from rdkit import Chem
-from rdkit.Chem import rdFingerprintGenerator
 
 RUNTIME_SCHEMA_VERSION = "1.0.0-cycpep-torsion-runtime.2"
 MANIFEST_SCHEMA_VERSION = "1.0.0-cycpep-torsion-manifest.1"
@@ -240,6 +239,10 @@ def _morgan_bond_environment(
     left: int,
     right: int,
 ) -> str:
+    # Deferred: the fingerprint extension (~0.3 s) is only needed for
+    # morgan-level prior lookups, not for exact/residue/generic hits.
+    from rdkit.Chem import rdFingerprintGenerator
+
     generator = rdFingerprintGenerator.GetMorganGenerator(radius=2)
     fingerprint = generator.GetSparseCountFingerprint(
         molecule,

@@ -76,12 +76,6 @@ def get_r3_atom(pdb_code):
     return rec.get('r3_atom') if rec else None
 
 
-def get_record(pdb_code):
-    """Full record dict for a PDB code, or None."""
-    _load()
-    return _DB.get(pdb_code)
-
-
 def all_codes():
     """Set of all registered PDB codes."""
     _load()

@@ -69,15 +69,6 @@ def _default_view() -> Optional[TemplateLibraryView]:
     return _DEFAULT_VIEW
 
 
-def _load_index() -> dict:
-    """Compatibility accessor for the default CPBind/Scaffold-only view."""
-    global _INDEX
-    if _INDEX is None:
-        view = _default_view()
-        _INDEX = dict(view.entries) if view is not None else {}
-    return _INDEX
-
-
 # SMARTS for a residue backbone: N - Cα - C(=O) - O
 # Matches each peptide backbone unit. A 14-residue cyclic peptide yields 14.
 _BACKBONE_SMARTS = Chem.MolFromSmarts(
@@ -1228,76 +1219,3 @@ def generate_conformers(
     return mol_h, picked
 
 
-def add_synthetic_template(generated_smiles: str, generated_map: str,
-                           mol_3d: "Chem.Mol") -> Optional[str]:
-    """Self-augment the template library with a de-novo docked conformer.
-
-    The packaged library (CPBind/CPSea/Scaffold) covers model-generated cyclic
-    peptides poorly (~10% Scene-A hit rate), so most RFT peptides fall through to
-    unguided ETKDG. When such a peptide docks well, its 3D pose IS a valid bound
-    conformation for its residue-count/topology bucket — feeding it back lets the
-    library grow to cover the generative distribution as RFT proceeds.
-
-    Writes `mol_3d` (heavy atoms + Hs, one conformer) as a standalone PDB under
-    the peptide's bucket dir and appends an index entry with source="synthetic".
-    The index write is atomic (temp + os.replace) and this runs only in the main
-    process after the serial GPU dock, so there is no concurrent-writer race.
-
-    Returns the new template key, or None on failure (never raises — a failed
-    harvest must not break the reward path).
-    """
-    # Runtime self-augmentation is development-only. Publication benchmarks
-    # must use an immutable, pre-frozen template library.
-    if os.environ.get("CYCPEP_MASTER_ALLOW_SYNTHETIC_TEMPLATE") != "1":
-        return None
-
-    try:
-        n_res = _residue_count(generated_map)
-        cyc = _cyc_mode(generated_map)
-        bucket = f"{n_res}_{cyc}"
-        bucket_dir = os.path.join(_TEMPLATES_DIR, bucket)
-        os.makedirs(bucket_dir, exist_ok=True)
-
-        idx_path = os.path.join(_TEMPLATES_DIR, "templates_index.json")
-        index = {}
-        if os.path.exists(idx_path):
-            with open(idx_path, encoding="utf-8") as f:
-                index = json.load(f)
-
-        # unique key: {bucket}_syn_{N:03d}, N = next free synthetic slot
-        existing = [k for k in index if k.startswith(f"{bucket}_syn_")]
-        n = len(existing) + 1
-        while f"{bucket}_syn_{n:03d}" in index:
-            n += 1
-        key = f"{bucket}_syn_{n:03d}"
-
-        pdb_rel = f"{bucket}/synthetic_{n:03d}.pdb"
-        pdb_abs = os.path.join(_TEMPLATES_DIR, pdb_rel)
-        pdb_block = Chem.MolToPDBBlock(mol_3d)
-        if not pdb_block or "ATOM" not in pdb_block and "HETATM" not in pdb_block:
-            return None
-        with open(pdb_abs, "w") as f:
-            f.write(pdb_block)
-
-        index[key] = {
-            "pdb_path": pdb_rel,
-            "smiles": generated_smiles,
-            "map": generated_map,
-            "n_res": n_res,
-            "cyc_mode": cyc,
-            "source": "synthetic",
-            "source_filename": key,
-        }
-        # atomic index write so a crash can't truncate the shared index
-        tmp = idx_path + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(index, f, ensure_ascii=False)
-        os.replace(tmp, idx_path)
-
-        # invalidate the module cache so the new template is visible next call
-        global _INDEX, _DEFAULT_VIEW
-        _INDEX = None
-        _DEFAULT_VIEW = None
-        return key
-    except Exception:
-        return None

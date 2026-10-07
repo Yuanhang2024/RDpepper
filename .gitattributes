@@ -1,0 +1,3 @@
+# Preserve the exact evaluated runtime/resource bytes across platforms.
+# Runtime identities are recorded in provenance/EVALUATED_SOURCE.json.
+* -text

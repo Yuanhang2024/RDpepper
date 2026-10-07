@@ -1,4 +1,4 @@
-RDpepper 7.1.0
+RDpepper 7.3.0
 
 The software code is distributed under the MIT license, including
 Copyright (c) 2021-2024 Charles Xu and others and
@@ -27,7 +27,7 @@ Bundled data and their sources:
   10.5281/zenodo.15164650.
 
 See THIRD_PARTY_DATA.md for full attribution, modifications and source
-links, and ORIGINAL_SOURCE.json for the frozen source identity behind
-this distribution. This distribution is a documentation- and
-privacy-cleaned copy of the frozen 7.1.0 source; it is not
-byte-identical to the internal source archive.
+links, and provenance/EVALUATED_SOURCE.json for the evaluated 7.3.0 runtime
+source identity. ORIGINAL_SOURCE.json retains the historical 7.1.0
+identity. Documentation and packaging metadata are maintained separately
+from the evaluated runtime implementation.

@@ -27,11 +27,5 @@ Attribution: The CXSMILES/RGroups utilities and MAP↔SMILES conversion
 framework in paths/_map_utils.py (lines marked "code under MIT licence
 Copyright (c) 2021-2024 Charles Xu and others") are derived from the
 MAP_HELM_SMILES project (https://github.com/ShendreAk/MAP_HELM_SMILES,
-GPS Raghava Team, IIIT Delhi). The notice above applies to the software code, not to all bundled data.
-
-Bundled third-party data retain their own terms. The 9,998-row NNAA data
-are licensed under CC BY-NC 4.0. CPSea/CPBind and AfCycDesign-derived
-coordinate templates and torsion summaries use CC BY 4.0. CycPeptMPDB-derived rows are CC BY 4.0 and the HELM-GPT monomer subset
-follows the HELM-GPT project MIT license; see THIRD_PARTY_DATA.md and
-NOTICE. The package as a whole is not licensed under MIT, and this notice
-does not grant rights held by third parties.
+GPS Raghava Team, IIIT Delhi). The unified monomer library is built from
+the CycPeptMPDB monomer database and a 9,998-entry NNAA set.
