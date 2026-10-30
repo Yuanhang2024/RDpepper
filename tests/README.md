@@ -9,7 +9,7 @@ derivation, and the conformer guard — they need only the repo itself:
 
 ```bash
 pip install -e . pytest
-python -m pytest cycpep_master/tests/ \
+python -m pytest tests/ \
   -p no:cacheprovider --import-mode=importlib \
   --ignore=cycpep_master/tests/test_cyclization.py \
   --ignore=cycpep_master/tests/test_branched.py \
@@ -32,7 +32,7 @@ repo. To run them:
 3. Run the full suite:
 
 ```bash
-python -m pytest cycpep_master/tests/ -p no:cacheprovider --import-mode=importlib
+python -m pytest tests/ -p no:cacheprovider --import-mode=importlib
 ```
 
 If the data is absent these tests `pytest.skip` rather than fail.

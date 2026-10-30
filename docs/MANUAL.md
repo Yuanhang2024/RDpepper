@@ -316,7 +316,7 @@ processes reuse it. The companion case-study runner pins this cache inside
 its own directory so runs stay self-contained. No controlled end-to-end
 speedup ratio is claimed here; absolute runtimes for the reference machine
 are recorded per command in each case-study run's `results.json`
-(latest copy: `case_studies/latest_results.json`).
+(latest copy: `case_studies/reference_run/summary.json`).
 
 ## 8. Python API
 

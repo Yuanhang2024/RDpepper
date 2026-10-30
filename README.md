@@ -1,5 +1,9 @@
 # RDpepper 7.3.0
 
+[![PyPI version](https://img.shields.io/pypi/v/rdpepper.svg)](https://pypi.org/project/rdpepper/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
+
 RDpepper prepares cyclic-peptide chemical graphs from PDB/mmCIF coordinates and exports MOL2 files with coordinate provenance, evidence labels, and validation receipts. Python, command-line, and optional desktop interfaces share the same application layer.
 
 The workflow combines residue and monomer definitions, cross-link information, chemical reconstruction, and graded recovery. It records the distinction between a qualified structure, a recoverable candidate, and a topology or metadata result. An explicit charge-aware MOL2 reader restores declared formal charges before RDKit sanitization.
@@ -44,7 +48,7 @@ The reader modes are explicit. `rdkit_native` uses RDKit's native MOL2 parser. `
 
 ## Run the case studies
 
-Three small, included coordinate examples demonstrate export, inspection of the evidence record, and receipt-verified readback:
+Three automated case studies (plus one manual docking demonstration) demonstrate export, inspection of the evidence record, and receipt-verified readback:
 
 ```bash
 cd case_studies
